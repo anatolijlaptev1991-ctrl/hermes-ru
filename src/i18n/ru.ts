@@ -1,5 +1,16 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
+
+// Хелпер русской плюрализации: 1/2-4/5+
+function ruPlural(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+
 import { defineLocale } from './define-locale'
 
 export const ru = defineLocale({
@@ -110,7 +121,7 @@ export const ru = defineLocale({
     region: 'Уведомления',
     hide: 'Скрыть',
     show: 'Показать',
-    more: count => `${count} ещё ${count === 1 ? 'уведомление' : 'уведомлений'}`,
+    more: count => `${count} ещё ${ruPlural(count, 'уведомление', 'уведомления', 'уведомлений')}`,
     clearAll: 'Очистить все',
     dismiss: 'Скрыть уведомление',
     details: 'Подробности',
@@ -122,7 +133,7 @@ export const ru = defineLocale({
     installMethodUnsupportedTitle: 'Неподдерживаемый метод установки',
     updateHermes: 'Обновить Hermes',
     updateReadyTitle: 'Обновление готово',
-    updateReadyMessage: count => `${count} новое изменени${count === 1 ? 'е' : 'й'} доступно.`,
+    updateReadyMessage: count => `${count} нов${ruPlural(count, 'ое', 'ых', 'ых')} изменени${ruPlural(count, 'е', 'я', 'й')} доступно.`,
     seeWhatsNew: 'Что нового',
     errors: {
       elevenLabsNeedsKey: 'Для ElevenLabs STT требуется ELEVENLABS_API_KEY.',
@@ -393,7 +404,7 @@ export const ru = defineLocale({
       embedsAsk: 'Спрашивать',
       embedsAlways: 'Всегда',
       embedsOff: 'Выкл',
-      embedsReset: (count: number) => `Сбросить ${count} разрешённ${count === 1 ? 'ый сервис' : 'ых сервисов'}`,
+      embedsReset: (count: number) => `Сбросить ${count} разрешённ${ruPlural(count, 'ый сервис', 'ых сервиса', 'ых сервисов')}`,
       product: 'Продукт',
       productDesc: 'Понятные действия инструментов с краткими сводками.',
       technical: 'Технический',
@@ -431,7 +442,7 @@ export const ru = defineLocale({
         installedTag: 'установлен',
         generatedTag: 'Сгенерирован',
         countCapped: (cap, total) => `Показано ${cap} из ${total} — введите для фильтрации.`,
-        count: n => `${n} питомц${n === 1 ? 'ец' : 'ев'}.`,
+        count: n => `${n} питомц${ruPlural(n, 'ец', 'а', 'ев')}.`,
         uninstall: name => `Удалить ${name}`,
         delete: name => `Стереть ${name}`,
         deleteTitle: name => `Стереть ${name}?`,
@@ -606,7 +617,7 @@ export const ru = defineLocale({
     fieldDescriptions: defineFieldCopy({
       model: 'Используется для новых диалогов, если не выбрать другую модель в компоновщике.',
       modelContextLength: 'Оставьте 0, чтобы использовать окно контекста выбранной модели.',
-      fallbackProviders: 'Записи provider:model для尝试ки при сбое основной модели.',
+      fallbackProviders: 'Записи provider:model для резервной копии при сбое основной модели.',
       display: {
         personality: 'Стиль ассистента по умолчанию для новых сессий.',
         showReasoning: 'Показывать блок рассуждений, когда бэкенд их предоставляет.'
@@ -674,7 +685,7 @@ export const ru = defineLocale({
       cantUpdate: 'Эта сборка не может обновить сама себя из приложения.',
       cantReach: 'Не удалось связаться с сервером обновлений.',
       tapCheck: 'Нажмите «Проверить сейчас» для поиска обновлений.',
-      updateReady: count => `Обновление готово (включает ${count} изменени${count === 1 ? 'е' : 'й'}).`,
+      updateReady: count => `Обновление готово (включает ${count} изменени${ruPlural(count, 'е', 'я', 'й')}).`,
       lastChecked: age => `Последняя проверка ${age}`,
       justNowSuffix: ' · только что',
       automaticUpdates: 'Автоматические обновления',
@@ -854,7 +865,7 @@ export const ru = defineLocale({
       saveServer: 'Сохранить сервер',
       test: 'Тест подключения',
       testing: 'Тестирование…',
-      testOk: count => `Подключено — доступно ${count} инструмент${count === 1 ? '' : 'ов'}`,
+      testOk: count => `Подключено — доступно ${count} инструмент${ruPlural(count, '', 'а', 'ов')}`,
       testFailed: 'Подключение не удалось',
       enableServer: name => `Включить ${name}`,
       disableServer: name => `Отключить ${name}`,
@@ -953,7 +964,7 @@ export const ru = defineLocale({
       emptyArchivedDesc: 'Архивируйте чат, чтобы скрыть его сюда.',
       unarchive: 'Вернуть из архива',
       deletePermanently: 'Удалить навсегда',
-      messages: count => `${count} сообщени${count === 1 ? 'е' : 'й'}`,
+      messages: count => `${count} сообщени${ruPlural(count, 'е', 'я', 'й')}`,
       restored: 'Восстановлено',
       deleteConfirm: title => `Навсегда удалить «${title}»? Это действие необратимо.`,
       defaultDirTitle: 'Каталог проекта по умолчанию',
@@ -1004,7 +1015,7 @@ export const ru = defineLocale({
       postSetupFailed: step => `Не удалось запустить настройку ${step}`,
       loadingModels: 'Загрузка каталога моделей…',
       modelSectionTitle: 'Модель',
-      modelCount: count => `${count} модел${count === 1 ? 'ь' : 'ей'}`,
+      modelCount: count => `${count} модел${ruPlural(count, 'ь', 'и', 'ей')}`,
       modelInUse: 'Используется',
       modelDefault: 'по умолчанию',
       modelInactiveHint: 'Сначала выберите этот бэкенд для смены его модели.',
@@ -1050,7 +1061,7 @@ export const ru = defineLocale({
     enableAll: 'Включить все',
     disableAll: 'Отключить все',
     disableUnused: 'Отключить неиспользуемые',
-    bulkUpdated: count => `Обновлено ${count} элемент${count === 1 ? '' : 'ов'} для новых сессий.`,
+    bulkUpdated: count => `Обновлено ${count} элемент${ruPlural(count, '', 'а', 'ов')} для новых сессий.`,
     bulkNoChange: 'Нечего менять.',
     usageCount: count => `использован ${count}×`,
     provenance: {
@@ -1077,7 +1088,7 @@ export const ru = defineLocale({
       landingHint:
         'Ищите в хабе для просмотра устанавливаемых навыков из официального индекса, GitHub и сообщества.',
       noResults: 'В хабе не найдено подходящих навыков.',
-      resultCount: (count, ms) => `${count} результат${count === 1 ? '' : 'ов'}${ms !== null ? ` за ${ms}мс` : ''}`,
+      resultCount: (count, ms) => `${count} результат${ruPlural(count, '', 'а', 'ов')}${ms !== null ? ` за ${ms}мс` : ''}`,
       timedOut: sources => `Таймаут: ${sources}`,
       installed: 'Установлен',
       install: 'Установить',
@@ -1103,7 +1114,7 @@ export const ru = defineLocale({
       policyAllow: 'Установка разрешена',
       policyAsk: 'Проверка перед установкой',
       policyBlock: 'Установка заблокирована политикой',
-      findings: count => `${count} наход${count === 1 ? 'ка' : 'ок'}`,
+      findings: count => `${count} наход${ruPlural(count, 'ка', 'ки', 'ок')}`,
       noFindings: 'Уязвимостей не найдено.',
       installStarted: name => `Установка ${name}...`,
       uninstallStarted: name => `Удаление ${name}...`,
@@ -1160,7 +1171,7 @@ export const ru = defineLocale({
     delegation: index => `Делегирование ${index}`,
     workers: count => `${count} воркер(ов)`,
     workersActive: count => `${count} активн(ых)`,
-    agentsCount: count => `${count} агент${count === 1 ? '' : 'ов'}`,
+    agentsCount: count => `${count} агент${ruPlural(count, '', 'а', 'ов')}`,
     activeCount: count => `${count} активн(ых)`,
     failedCount: count => `${count} с ошибкой`,
     toolsCount: count => `${count} инструментов`,
@@ -1495,7 +1506,7 @@ export const ru = defineLocale({
     close: 'Закрыть профили',
     nameHint: 'Строчные буквы, цифры, дефисы и подчёркивания. Должно начинаться с буквы или цифры.',
     title: 'Профили',
-    count: count => `${count} профиль${count === 1 ? '' : 'ей'}`,
+    count: count => `${count} профиль${ruPlural(count, '', 'я', 'ей')}`,
     search: 'Поиск профилей...',
     loading: 'Загрузка профилей...',
     newProfile: 'Новый профиль',
@@ -1513,7 +1524,7 @@ export const ru = defineLocale({
     refresh: 'Обновить профили',
     refreshing: 'Обновление профилей',
     default: 'по умолчанию',
-    skills: count => `${count} навык${count === 1 ? '' : 'ов'}`,
+    skills: count => `${count} навык${ruPlural(count, '', 'а', 'ов')}`,
     env: 'env',
     defaultBadge: 'По умолчанию',
     rename: 'Переименовать',
@@ -1572,7 +1583,7 @@ export const ru = defineLocale({
   cron: {
     close: 'Закрыть cron',
     title: 'Расписания',
-    count: count => `${count} задани${count === 1 ? 'е' : 'й'}`,
+    count: count => `${count} задани${ruPlural(count, 'е', 'я', 'й')}`,
     search: 'Поиск заданий cron...',
     loading: 'Загрузка заданий cron...',
     states: {
@@ -1914,7 +1925,7 @@ export const ru = defineLocale({
     queued: count => `${count} в очереди`,
     attachmentOnly: 'Шаг только с вложениями',
     emptyTurn: 'Пустой шаг',
-    attachments: count => `${count} вложени${count === 1 ? 'е' : 'й'}`,
+    attachments: count => `${count} вложени${ruPlural(count, 'е', 'я', 'й')}`,
     editingInComposer: 'Редактирование в компоновщике',
     editingQueuedInComposer: 'Редактирование ход из очереди в компоновщике',
     queueEdit: 'Изменить',
@@ -1970,7 +1981,7 @@ export const ru = defineLocale({
   statusStack: {
     agents: 'Агенты',
     background: count => `${count} фоновых`,
-    subagents: count => `${count} суб-агент${count === 1 ? '' : 'ов'}`,
+    subagents: count => `${count} суб-агент${ruPlural(count, '', 'а', 'ов')}`,
     todos: (done, total) => `Задачи ${done}/${total}`,
     running: 'Выполняется',
     stop: 'Стоп',
@@ -2054,7 +2065,7 @@ export const ru = defineLocale({
     availableBodyNoChangelog: 'Новая версия готова. Примечания к выпуску недоступны для этого типа установки.',
     updateNow: 'Обновить сейчас',
     maybeLater: 'Может быть позже',
-    moreChanges: count => `+ ещё ${count} изменени${count === 1 ? 'е' : 'й'}.`,
+    moreChanges: count => `+ ещё ${count} изменени${ruPlural(count, 'е', 'я', 'й')}.`,
     manualTitle: 'Обновление из терминала',
     manualBody: 'Вы установили Hermes из командной строки, поэтому обновления тоже запускаются там. Вставьте это в терминал:',
     manualPickedUp: 'Hermes подхватит новую версию при следующем запуске.',
@@ -2266,7 +2277,7 @@ export const ru = defineLocale({
       restart: 'перезапуск',
       update: 'обновление',
       updateInProgress: 'Идёт обновление',
-      commitsBehind: (count, branch) => `${count} коммит${count === 1 ? '' : 'ов'} позади ${branch}`,
+      commitsBehind: (count, branch) => `${count} коммит${ruPlural(count, '', 'а', 'ов')} позади ${branch}`,
       desktopVersion: version => `Hermes Desktop v${version}`,
       backendVersion: version => `Бэкенд v${version}`,
       clientLabel: version => `клиент v${version}`,
@@ -2288,7 +2299,7 @@ export const ru = defineLocale({
       agents: 'Агенты',
       closeAgents: 'Закрыть агентов',
       openAgents: 'Открыть агентов',
-      subagents: count => `${count} суб-агент${count === 1 ? '' : 'ов'}`,
+      subagents: count => `${count} суб-агент${ruPlural(count, '', 'а', 'ов')}`,
       failed: count => `${count} с ошибкой`,
       running: count => `${count} выполняется`,
       cron: 'Cron',
@@ -2420,7 +2431,7 @@ export const ru = defineLocale({
       empty: 'Сообщений консоли пока нет.',
       promptHeader: 'Консоль предпросмотра:',
       sentTitle: 'Отправлено в чат',
-      sentMessage: count => `${count} запис${count === 1 ? 'ь' : 'ей'} лога добавлен${count === 1 ? 'а' : 'о'} в компоновщик`
+      sentMessage: count => `${count} запис${ruPlural(count, 'ь', 'и', 'ей')} лога добавлен${ruPlural(count, 'а', 'о', 'о')} в компоновщик`
     },
     web: {
       appFailedToBoot: 'Сбой запуска preview-приложения',
@@ -2468,7 +2479,7 @@ export const ru = defineLocale({
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Продолжит после завершения фоновой задачи'
-          : `Продолжит после завершения ${count} фоновых задач`,
+          : `Продолжит после завершения ${count} ${ruPlural(count, 'фоновой задачи', 'фоновых задач', 'фоновых задач')}`,
       thinking: 'Размышление',
       today: time => `Сегодня, ${time}`,
       yesterday: time => `Вчера, ${time}`,

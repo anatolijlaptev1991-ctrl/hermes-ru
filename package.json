@@ -18,11 +18,11 @@
     "assets/",
     "dist/",
     "compat.json",
+    "CHANGELOG.md",
     "README.md"
   ],
   "dependencies": {
-    "@electron/asar": "^3.2.0",
-    "asar": "^3.2.0"
+    "@electron/asar": "^3.2.0"
   },
   "engines": {
     "node": ">=18"
