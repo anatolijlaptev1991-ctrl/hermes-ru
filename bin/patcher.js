@@ -157,19 +157,28 @@ function stageToPersistent(resourcesDir) {
   if (fs.existsSync(launcherSource)) {
     fs.copyFileSync(launcherSource, path.join(dataDir, 'hermes-ru-launcher.js'));
   }
+  // Копируем иконку
+  const iconSource = path.join(__dirname, '..', 'assets', 'hermes-ru-icon.ico');
+  if (fs.existsSync(iconSource)) {
+    fs.copyFileSync(iconSource, path.join(dataDir, 'hermes-ru-icon.ico'));
+    log('✓ Иконка скопирована');
+  }
   log(`✓ Перевод сохранён в ${dataDir}`);
 }
 
 function createShortcut(lnkPath, launcherJs) {
   const nodeExe = process.execPath;
+  const iconPath = path.join(getPersistentDataDir(), 'hermes-ru-icon.ico');
+  const iconLine = fs.existsSync(iconPath) ? `$sc.IconLocation = '${iconPath.replace(/\\/g, '\\\\')}'\n` : '';
   const psPath = path.join(os.tmpdir(), 'hermes-ru-shortcut.ps1');
   const ps = [
     '$ws = New-Object -ComObject WScript.Shell',
     `$sc = $ws.CreateShortcut('${lnkPath.replace(/\\/g, '\\\\')}')`,
     `$sc.TargetPath = '${nodeExe.replace(/\\/g, '\\\\')}'`,
-    `$sc.Arguments = '${launcherJs.replace(/\\/g, '\\\\')}'`,
+    `$sc.Arguments = '"${launcherJs.replace(/\\/g, '\\\\')}"'`,
     `$sc.WorkingDirectory = '${os.homedir().replace(/\\/g, '\\\\')}'`,
     `$sc.Description = 'Hermes Agent Desktop (Русский)'`,
+    iconLine,
     '$sc.Save()',
   ].join('\n') + '\n';
   fs.writeFileSync(psPath, ps, 'utf8');

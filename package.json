@@ -15,6 +15,7 @@
   "files": [
     "bin/",
     "launcher/",
+    "assets/",
     "dist/",
     "compat.json",
     "README.md"
