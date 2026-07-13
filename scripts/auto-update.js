@@ -127,6 +127,57 @@ function compareVersions(a, b) {
   return 0;
 }
 
+// ─── Проверка консистентности ───
+function checkRepoConsistency(repoDir) {
+  const errors = [];
+  const EXPECTED_SCOPE = '@anatolijlaptev1991/hermes-ru';
+
+  // 1. package.json: name = scoped
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoDir, 'package.json'), 'utf8'));
+  if (pkg.name !== EXPECTED_SCOPE) {
+    errors.push(`package.json name: "${pkg.name}" != "${EXPECTED_SCOPE}"`);
+  }
+
+  // 2. README: все npm install -g должны использовать scoped имя
+  const readme = fs.readFileSync(path.join(repoDir, 'README.md'), 'utf8');
+  const badNpm = readme.match(/npm\s+(?:install|i)\s+-g\s+hermes-ru(?!@)/g);
+  if (badNpm) errors.push(`README: ${badNpm.length} npm install без scope: ${badNpm.slice(0, 3).join(', ')}`);
+
+  // 3. README: npm badge ссылается на scoped пакет
+  const readme_npm_badge_match = readme.match(/!\[npm\]\((.*?)\)/);
+  if (readme_npm_badge_match) {
+    const badge_url = readme_npm_badge_match[1];
+    if (!badge_url.includes('anatolijlaptev1991/hermes-ru')) {
+      errors.push(`README npm badge: не содержит scoped имя (${badge_url})`);
+    }
+  }
+
+  // 4. compat.json: version соответствует package.json
+  const compat = JSON.parse(fs.readFileSync(path.join(repoDir, 'compat.json'), 'utf8'));
+  if (compat.version !== pkg.version) {
+    errors.push(`compat.json version (${compat.version}) != package.json (${pkg.version})`);
+  }
+
+  // 5. CHANGELOG.md существует
+  if (!fs.existsSync(path.join(repoDir, 'CHANGELOG.md'))) {
+    errors.push('CHANGELOG.md не существует');
+  }
+
+  // 6. Нет дубля asar в dependencies
+  if (pkg.dependencies && pkg.dependencies.asar) {
+    errors.push('dependencies.asar дублирует @electron/asar');
+  }
+
+  // 7. Нет CJK в ru.ts
+  const ruPath = path.join(repoDir, 'src', 'i18n', 'ru.ts');
+  if (fs.existsSync(ruPath)) {
+    const ru = fs.readFileSync(ruPath, 'utf8');
+    if (/[\u4e00-\u9fff]/.test(ru)) errors.push('CJK символы в src/i18n/ru.ts');
+  }
+
+  return errors;
+}
+
 // ─── Главная функция ───
 async function main() {
   log('=== Запуск автообновления hermes-ru ===');
@@ -277,6 +328,17 @@ async function main() {
     process.exit(1);
   }
   log('✓ Тест пройден');
+
+  // 9b. Проверка консистентности репозитория перед публикацией
+  log('Проверка консистентности...');
+  const consistencyErrors = checkRepoConsistency(REPO_DIR);
+  if (consistencyErrors.length > 0) {
+    log(`✗ Консистентность: ${consistencyErrors.length} ошибок:`);
+    consistencyErrors.forEach(e => log(`  - ${e}`));
+    await sendTelegram(`❌ hermes-ru: ошибка консистентности репозитория\n${consistencyErrors.join('\n').slice(0, 500)}`);
+    process.exit(1);
+  }
+  log('✓ Консистентность OK');
 
   if (DRY_RUN) {
     log('--dry-run: публикация пропущена');
