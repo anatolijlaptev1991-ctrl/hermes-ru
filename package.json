@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru",
   "bin": {
-    "hermes-ru": "./bin/cli.js"
+    "hermes-ru": "bin/cli.js"
   },
   "files": [
     "bin/",
