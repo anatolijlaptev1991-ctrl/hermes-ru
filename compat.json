@@ -1,0 +1,5 @@
+{
+  "version": "0.17.0",
+  "hermesVersions": ["0.17.0"],
+  "notes": "Initial release. Полный перевод интерфейса Hermes Desktop."
+}

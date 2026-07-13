@@ -1,0 +1,36 @@
+{
+  "name": "hermes-ru",
+  "version": "0.17.0",
+  "description": "Русская локализация Hermes Agent Desktop для Windows. Self-healing патч.",
+  "license": "MIT",
+  "author": "Anatolij Laptev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru.git"
+  },
+  "homepage": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru",
+  "bin": {
+    "hermes-ru": "./bin/cli.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/postinstall.js"
+  },
+  "dependencies": {
+    "@electron/asar": "^3.2.8"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "win32"
+  ],
+  "keywords": [
+    "hermes",
+    "hermes-agent",
+    "russian",
+    "localization",
+    "i18n",
+    "русский",
+    "русификатор"
+  ]
+}

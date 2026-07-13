@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.hermes-ru-patched
+app.asar.orig
+# Большой JS-бандл доставляется через GitHub Releases (см. dist/ в релизе),
+# чтобы не перегружать git-репозиторий.
+dist/assets/index-*.js
+dist/
