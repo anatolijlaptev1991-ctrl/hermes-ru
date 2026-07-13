@@ -1,0 +1,30 @@
+{
+  "description": "Захардкоженные английские строки в TSX-компонентах Hermes. patcher.js заменяет их в собранном бандле.",
+  "replacements": [
+    {
+      "file_pattern": "index-*.js",
+      "find": "Grab a key from",
+      "replace": "Получить ключ из"
+    },
+    {
+      "file_pattern": "index-*.js",
+      "find": "Driver health",
+      "replace": "Состояние драйвера"
+    },
+    {
+      "file_pattern": "index-*.js",
+      "find": "Confirm uninstall",
+      "replace": "Подтвердить удаление"
+    },
+    {
+      "file_pattern": "index-*.js",
+      "find": "Uninstall Hermes",
+      "replace": "Удалить Hermes"
+    },
+    {
+      "file_pattern": "index-*.js",
+      "find": "Tool payload",
+      "replace": "Данные инструмента"
+    }
+  ]
+}
