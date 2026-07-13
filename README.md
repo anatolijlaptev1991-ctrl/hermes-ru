@@ -44,7 +44,7 @@
 ### Через npm (рекомендуется)
 
 ```bash
-npm install -g hermes-ru
+npm install -g @anatolijlaptev1991/hermes-ru
 hermes-ru install
 ```
 
@@ -117,7 +117,7 @@ npx hermes-ru status
 Новые версии Hermes выходят регулярно. Когда выйдет совместимая версия `hermes-ru` — просто переустановите пакет:
 
 ```bash
-npm install -g hermes-ru
+npm install -g @anatolijlaptev1991/hermes-ru
 hermes-ru install
 ```
 
