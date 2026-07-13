@@ -5,7 +5,6 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
-const asar = require('@electron/asar');
 
 const rm = (p) => fs.rmSync(p, { recursive: true, force: true });
 const mkdirp = (p) => fs.mkdirSync(p, { recursive: true });
@@ -56,61 +55,85 @@ function fileHash(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
-function copyDirSync(src, dest) {
-  if (fs.existsSync(dest)) rm(dest);
-  recursiveCopy(src, dest);
+function isHermesRunning() {
+  try {
+    const out = execSync('tasklist /FI "IMAGENAME eq Hermes.exe"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    return /Hermes\.exe/i.test(out);
+  } catch (e) {
+    return false;
+  }
 }
 
 function killHermes() {
   try { execSync('taskkill /F /IM Hermes.exe', { stdio: 'ignore' }); } catch (e) { /* not running */ }
 }
 
-function patchAsar(resourcesDir, distSourceDir) {
-  const asarPath = path.join(resourcesDir, 'app.asar');
-  const backupPath = path.join(resourcesDir, BACKUP_NAME);
-  const unpackDir = path.join(resourcesDir, '_hermes_ru_unpack');
-
-  killHermes();
-
-  if (!fs.existsSync(backupPath)) {
-    log('Создаю резервную копию app.asar...');
-    fs.copyFileSync(asarPath, backupPath);
+function launchHermes(resourcesDir) {
+  const launcherJs = path.join(getPersistentDataDir(), 'hermes-ru-launcher.js');
+  if (fs.existsSync(launcherJs)) {
+    try {
+      execSync(`cmd /c start "" node "${launcherJs}"`, { stdio: 'ignore', detached: true });
+      log('Hermes запущен через self-healing launcher.');
+      return;
+    } catch (e) { /* fall through */ }
   }
+  const exe = resourcesDir && findHermesExe(resourcesDir);
+  if (exe) {
+    try {
+      execSync(`cmd /c start "" "${exe}"`, { stdio: 'ignore', detached: true });
+      log('Hermes запущен напрямую.');
+      return;
+    } catch (e) { /* ignore */ }
+  }
+  warn('Не удалось автоматически запустить Hermes. Откройте ярлык вручную.');
+}
 
-  log('Распаковываю app.asar...');
-  if (fs.existsSync(unpackDir)) rm(unpackDir);
-  mkdirp(unpackDir);
-  asar.extractAll(asarPath, unpackDir);
-
-  log('Внедряю русскую локализацию...');
-  copyDirSync(distSourceDir, path.join(unpackDir, 'dist'));
-
-  log('Запаковываю app.asar...');
-  asar.createPackageFromFilesWithOptions(unpackDir, asarPath, { unpackDir: 'node_modules' });
-
-  rm(unpackDir);
+// Основной метод: Hermes берёт dist из app.asar.unpacked/dist.
+// Заменяем только эту папку — НЕ трогая app.asar (безопасно, нет багов asar+Node24).
+function patchLoc(resourcesDir, distSourceDir) {
+  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
+  if (!fs.existsSync(unpackedDir)) {
+    // fallback: распаковать app.asar (редкий случай)
+    err('app.asar.unpacked не найден. Этот метод установки не поддерживается для вашей сборки.');
+    return false;
+  }
+  const destDist = path.join(unpackedDir, 'dist');
+  log('Заменяю dist на русскую версию...');
+  if (fs.existsSync(destDist)) rm(destDist);
+  recursiveCopy(distSourceDir, destDist);
 
   fs.writeFileSync(path.join(resourcesDir, PATCH_MARKER), JSON.stringify({
     version: VERSION,
     patchedAt: new Date().toISOString(),
-    originalHash: fileHash(backupPath),
+    method: 'app.asar.unpacked/dist',
   }));
-
-  log('✓ Патч применён!');
+  log('✓ Локализация применена!');
+  return true;
 }
 
-function restoreAsar(resourcesDir) {
-  const asarPath = path.join(resourcesDir, 'app.asar');
-  const backupPath = path.join(resourcesDir, BACKUP_NAME);
-  if (!fs.existsSync(backupPath)) {
-    err('Резервная копия не найдена. Локализация, возможно, не устанавливалась.');
+function restoreLoc(resourcesDir) {
+  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
+  if (!fs.existsSync(unpackedDir)) {
+    err('app.asar.unpacked не найден.');
     return false;
   }
-  killHermes();
-  log('Восстанавливаю оригинальный app.asar...');
-  fs.copyFileSync(backupPath, asarPath);
+  const destDist = path.join(unpackedDir, 'dist');
+  // Мы не делали backup dist отдельно — восстанавливаем из app.asar (оригинальный dist там есть)
+  const asarDist = path.join(unpackedDir, '_orig_dist_extract');
+  try {
+    const asar = require('@electron/asar');
+    if (fs.existsSync(asarDist)) rm(asarDist);
+    mkdirp(asarDist);
+    asar.extractAll(path.join(resourcesDir, 'app.asar'), asarDist);
+    if (fs.existsSync(destDist)) rm(destDist);
+    recursiveCopy(path.join(asarDist, 'dist'), destDist);
+    rm(asarDist);
+  } catch (e) {
+    warn('Не удалось восстановить dist из asar: ' + e.message);
+    warn('Переустановите Hermes, чтобы вернуть оригинальный dist.');
+  }
   rm(path.join(resourcesDir, PATCH_MARKER));
-  log('✓ Оригинал восстановлен!');
+  log('✓ Оригинальный dist восстановлен!');
   return true;
 }
 
@@ -124,7 +147,8 @@ function stageToPersistent(resourcesDir) {
   const dataDir = getPersistentDataDir();
   const distSource = path.join(__dirname, '..', 'dist');
   log('Копирую перевод в персистентное хранилище...');
-  copyDirSync(distSource, path.join(dataDir, 'dist'));
+  if (fs.existsSync(path.join(dataDir, 'dist'))) rm(path.join(dataDir, 'dist'));
+  recursiveCopy(distSource, path.join(dataDir, 'dist'));
   fs.writeFileSync(path.join(dataDir, 'version.json'), JSON.stringify({
     hermesRuVersion: VERSION,
     stagedAt: new Date().toISOString(),
@@ -136,24 +160,47 @@ function stageToPersistent(resourcesDir) {
   log(`✓ Перевод сохранён в ${dataDir}`);
 }
 
+function createShortcut(lnkPath, launcherJs) {
+  const nodeExe = process.execPath;
+  const psPath = path.join(os.tmpdir(), 'hermes-ru-shortcut.ps1');
+  const ps = [
+    '$ws = New-Object -ComObject WScript.Shell',
+    `$sc = $ws.CreateShortcut('${lnkPath.replace(/\\/g, '\\\\')}')`,
+    `$sc.TargetPath = '${nodeExe.replace(/\\/g, '\\\\')}'`,
+    `$sc.Arguments = '${launcherJs.replace(/\\/g, '\\\\')}'`,
+    `$sc.WorkingDirectory = '${os.homedir().replace(/\\/g, '\\\\')}'`,
+    `$sc.Description = 'Hermes Agent Desktop (Русский)'`,
+    '$sc.Save()',
+  ].join('\n') + '\n';
+  fs.writeFileSync(psPath, ps, 'utf8');
+  try {
+    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    warn('Не удалось создать ярлык: ' + e.message);
+    return false;
+  } finally {
+    rm(psPath);
+  }
+}
+
 function createWindowsLauncher(resourcesDir) {
   const dataDir = getPersistentDataDir();
-  const hermesExe = findHermesExe(resourcesDir);
-  if (!hermesExe) {
-    warn('Hermes.exe не найден, launcher не создан.');
-    return;
-  }
   const launcherJs = path.join(dataDir, 'hermes-ru-launcher.js');
-  const vbsDir = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
-  mkdirp(vbsDir);
-  const vbsPath = path.join(vbsDir, 'Hermes (Русский).vbs');
-  const vbsContent = `' Auto-generated by hermes-ru
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "node ""${launcherJs.replace(/\//g, '\\\\')}""", 0, False
-`;
-  fs.writeFileSync(vbsPath, vbsContent);
-  log(`✓ Ярлык создан: ${vbsPath}`);
-  fs.writeFileSync(path.join(dataDir, 'hermes-exe-path.txt'), hermesExe);
+
+  const desktop = path.join(os.homedir(), 'Desktop');
+  mkdirp(desktop);
+  if (createShortcut(path.join(desktop, 'Hermes (Русский).lnk'), launcherJs)) {
+    log(`✓ Ярлык создан: ${path.join(desktop, 'Hermes (Русский).lnk')}`);
+  }
+
+  const startMenu = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
+  mkdirp(startMenu);
+  if (createShortcut(path.join(startMenu, 'Hermes (Русский).lnk'), launcherJs)) {
+    log(`✓ Ярлык создан: ${path.join(startMenu, 'Hermes (Русский).lnk')}`);
+  }
+
+  fs.writeFileSync(path.join(dataDir, 'hermes-exe-path.txt'), findHermesExe(resourcesDir) || '');
 }
 
 function setConfigLanguage() {
@@ -176,7 +223,7 @@ function setConfigLanguage() {
   log('✓ Язык ru установлен в config.yaml');
 }
 
-async function commandInstall() {
+async function commandInstall({ restart = false } = {}) {
   console.log('╔══════════════════════════════════════════╗');
   console.log('║  Установка русской локализации Hermes     ║');
   console.log('╚══════════════════════════════════════════╝\n');
@@ -190,74 +237,88 @@ async function commandInstall() {
 
   const distSourceDir = path.join(__dirname, '..', 'dist');
   if (!fs.existsSync(distSourceDir)) {
-    err('dist/ не найден в пакете. Переустановите: npm i -g hermes-ru');
+    err('dist/ не найден в пакете. Переустановите: npm i -g @anatolijlaptev1991/hermes-ru');
     process.exit(1);
   }
 
-  patchAsar(resourcesDir, distSourceDir);
+  if (isHermesRunning() && !restart) {
+    warn('Hermes запущен. Локализация применится к файлам, но активная сессия использует старую версию.');
+    warn('После завершения установки перезапустите Hermes вручную (через ярлык «Hermes (Русский)»).');
+  }
+
+  const ok = patchLoc(resourcesDir, distSourceDir);
+  if (!ok) process.exit(1);
   stageToPersistent(resourcesDir);
   createWindowsLauncher(resourcesDir);
   setConfigLanguage();
 
-  console.log('\n╔════════════════════════════════════════════════╗');
-  console.log('║  ✓ Установка завершена!                        ║');
-  console.log('║  Запустите Hermes из меню Пуск:                ║');
-  console.log('║    «Hermes (Русский)»                          ║');
-  console.log('║  Локализация восстановится после обновлений.   ║');
-  console.log('╚════════════════════════════════════════════════╝\n');
+  if (restart) {
+    console.log('\n╔════════════════════════════════════════════════╗');
+    console.log('║  ✓ Установка завершена и Hermes запущен!        ║');
+    console.log('╚════════════════════════════════════════════════╝\n');
+    launchHermes(resourcesDir);
+  } else {
+    console.log('\n╔════════════════════════════════════════════════╗');
+    console.log('║  ✓ Установка завершена!                        ║');
+    console.log('║                                                ║');
+    console.log('║  ПЕРЕЗАПУСТИТЕ HERMES вручную:                  ║');
+    console.log('║    ярлык «Hermes (Русский)» на рабочем столе   ║');
+    console.log('║  или через меню Пуск                          ║');
+    console.log('║                                                ║');
+    console.log('║  Локализация восстановится после обновлений.   ║');
+    console.log('╚════════════════════════════════════════════════╝\n');
+  }
 }
 
-async function commandUninstall() {
+async function commandUninstall({ restart = false } = {}) {
   console.log('Восстановление оригинального Hermes...\n');
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { err('Hermes Desktop не найден!'); process.exit(1); }
-  const restored = restoreAsar(resourcesDir);
+  const restored = restoreLoc(resourcesDir);
   const vbsDir = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
   if (fs.existsSync(vbsDir)) rm(vbsDir);
+  const desktopLnk = path.join(os.homedir(), 'Desktop', 'Hermes (Русский).lnk');
+  if (fs.existsSync(desktopLnk)) rm(desktopLnk);
   const configPath = path.join(os.homedir(), '.hermes', 'config.yaml');
   if (fs.existsSync(configPath)) {
     let content = fs.readFileSync(configPath, 'utf8');
     content = content.replace(/^\s*language:\s*ru\s*$/m, '  # language: ru (removed by hermes-ru)');
     fs.writeFileSync(configPath, content, 'utf8');
   }
-  if (restored) log('✓ Английский интерфейс восстановлен.');
+  if (restored) {
+    log('✓ Английский интерфейс восстановлен.');
+    if (restart) launchHermes(resourcesDir);
+  }
 }
 
 async function commandStatus() {
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { console.log('Hermes Desktop не найден.'); process.exit(1); }
   const markerPath = path.join(resourcesDir, PATCH_MARKER);
-  const backupPath = path.join(resourcesDir, BACKUP_NAME);
   if (!fs.existsSync(markerPath)) {
     console.log('Статус: ❌ Локализация не установлена');
     console.log('Запустите: hermes-ru install');
     return;
   }
   const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-  const currentHash = fileHash(path.join(resourcesDir, 'app.asar'));
-  const isPatched = currentHash !== marker.originalHash;
   console.log('╔══════════════════════════════════════════╗');
   console.log(`║  hermes-ru ${marker.version}`);
   console.log('╠══════════════════════════════════════════╣');
   console.log(`║  Hermes:        ${resourcesDir}`);
   console.log(`║  Установлен:    ${marker.patchedAt}`);
-  console.log(`║  Патч активен:  ${isPatched ? '✅ Да' : '❌ Нет (обновлён?)'}`);
-  if (!isPatched) {
-    console.log('║  Hermes обновлён — запустите ярлык        ');
-    console.log('║  «Hermes (Русский)» или hermes-ru repair  ');
-  }
+  console.log(`║  Метод:         ${marker.method || 'n/a'}`);
   console.log('╚══════════════════════════════════════════╝');
 }
 
-async function commandRepair() {
+async function commandRepair({ restart = false } = {}) {
   log('Принудительное перепатчивание...');
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { err('Hermes Desktop не найден!'); process.exit(1); }
-  const markerPath = path.join(resourcesDir, PATCH_MARKER);
-  if (fs.existsSync(markerPath)) rm(markerPath);
-  restoreAsar(resourcesDir);
-  patchAsar(resourcesDir, path.join(__dirname, '..', 'dist'));
-  log('✓ Ремонт завершён! Запустите Hermes через ярлык.');
+  const ok = patchLoc(resourcesDir, path.join(__dirname, '..', 'dist'));
+  if (!ok) process.exit(1);
+  log('✓ Ремонт завершён!');
+  if (!restart) log('Перезапустите Hermes вручную через ярлык «Hermes (Русский)».');
+  else launchHermes(resourcesDir);
 }
 
 module.exports = { commandInstall, commandUninstall, commandStatus, commandRepair };

@@ -4,35 +4,39 @@
 const { commandInstall, commandUninstall, commandStatus, commandRepair } = require('./patcher');
 
 const command = process.argv[2];
+const flags = process.argv.slice(3);
+const restart = flags.includes('--restart') || flags.includes('-r');
 
 const HELP = `
 hermes-ru — Русская локализация Hermes Agent Desktop
 
 Использование:
-  hermes-ru install     Установить русскую локализацию
-  hermes-ru uninstall   Восстановить оригинальный Hermes (английский)
-  hermes-ru status      Показать статус локализации
-  hermes-ru repair      Принудительно перепатчить (после обновления Hermes)
-  hermes-ru help        Эта справка
+  hermes-ru install           Установить русскую локализацию
+  hermes-ru install --restart Установить И перезапустить Hermes (убьёт текущую сессию!)
+  hermes-ru uninstall          Восстановить оригинальный Hermes (английский)
+  hermes-ru status             Показать статус локализации
+  hermes-ru repair             Принудительно перепатчить (после обновления Hermes)
+  hermes-ru repair --restart   Перепатчить И перезапустить Hermes
+  hermes-ru help               Эта справка
 
-После установки интерфейс Hermes Desktop будет на русском.
-Локализация автоматически восстанавливается после обновлений Hermes
-через механизм self-healing launcher.
+По умолчанию install/repair НЕ перезапускают Hermes — перезапустите
+вручную через ярлык «Hermes (Русский)» на рабочем столе.
+Флаг --restart нужен только для автоматического перезапуска.
 `;
 
 async function main() {
   switch (command) {
     case 'install':
-      await commandInstall();
+      await commandInstall({ restart });
       break;
     case 'uninstall':
-      await commandUninstall();
+      await commandUninstall({ restart });
       break;
     case 'status':
       await commandStatus();
       break;
     case 'repair':
-      await commandRepair();
+      await commandRepair({ restart });
       break;
     case 'help':
     case '--help':

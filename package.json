@@ -1,6 +1,6 @@
 {
   "name": "@anatolijlaptev1991/hermes-ru",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Русская локализация Hermes Agent Desktop для Windows. Self-healing патч.",
   "license": "MIT",
   "author": "Anatolij Laptev",
@@ -20,7 +20,8 @@
     "README.md"
   ],
   "dependencies": {
-    "@electron/asar": "^3.2.8"
+    "@electron/asar": "^3.2.0",
+    "asar": "^3.2.0"
   },
   "engines": {
     "node": ">=18"

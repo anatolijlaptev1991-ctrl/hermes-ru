@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/github/license/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru/commits)
-[![Hermes](https://img.shields.io/badge/Hermes%20Agent-v0.17.0-6366f1?style=flat-square)](https://github.com/nousresearch/hermes-agent)
+[![Hermes](https://img.shields.io/badge/Hermes%20Agent-v0.18.2-6366f1?style=flat-square)](https://github.com/nousresearch/hermes-agent)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru)
 [![npm](https://img.shields.io/badge/npm-hermes--ru-cb3837?style=flat-square)](https://www.npmjs.com/package/hermes-ru)
 
@@ -72,10 +72,13 @@ node bin/cli.js install
 
 ## Как это работает
 
-1. `hermes-ru install` находит `Hermes.exe`, распаковывает `app.asar`, заменяет `dist/` на версию с русским переводом и запаковывает обратно.
+1. `hermes-ru install` находит `Hermes.exe`, определяет `app.asar.unpacked/dist/` и заменяет его на версию с русским переводом (без пересборки `app.asar` — безопасно).
 2. Перевод копируется в `~/.hermes/russian-loc/` — переживает обновления Hermes.
 3. В меню Пуск создаётся ярлык **«Hermes (Русский)»**.
-4. При каждом запуске через ярлык **launcher проверяет целостность перевода**. Если Hermes обновился и перезаписал `app.asar` — launcher автоматически перепатчивает его и только потом запускает Hermes.
+4. При каждом запуске через ярлык **launcher**:
+   - проверяет целостность перевода и восстанавливает, если Hermes обновился;
+   - сравнивает локальную версию с последним релизом на GitHub и автоматически скачивает/применяет обновление перевода, если есть новая версия;
+   - затем запускает Hermes.
 
 > 💡 **Важно:** запускайте Hermes через ярлык «Hermes (Русский)», а не через обычный ярлык. Обычный запуск тоже покажет русский интерфейс, но после обновления Hermes перевод придётся восстановить вручную (`hermes-ru repair` или через ярлык).
 
@@ -138,7 +141,7 @@ hermes-ru/
 
 | Hermes | hermes-ru |
 |--------|-----------|
-| 0.17.0 | 0.17.0    |
+| 0.17.0 – 0.18.2 | 0.17.1 |
 
 ## Лицензия
 
