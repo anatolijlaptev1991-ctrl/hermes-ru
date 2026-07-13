@@ -12,9 +12,13 @@
   "bin": {
     "hermes-ru": "./bin/cli.js"
   },
-  "scripts": {
-    "postinstall": "node bin/postinstall.js"
-  },
+  "files": [
+    "bin/",
+    "launcher/",
+    "dist/",
+    "compat.json",
+    "README.md"
+  ],
   "dependencies": {
     "@electron/asar": "^3.2.8"
   },

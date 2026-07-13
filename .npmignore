@@ -1,0 +1,4 @@
+# node_modules внутри dist/ не публикуем — нативные бинарники
+# уже есть в оригинальном app.asar Hermes. Публикуем только
+# собранный UI (index.html, assets, electron-main.mjs).
+dist/node_modules
