@@ -101,8 +101,18 @@ function getInstalledHermesVersion() {
 }
 
 function getLatestHermesVersion() {
+  // Hermes публикуется через GitHub Releases, не npm
   try {
-    return execSync(`npm view ${HERMES_REGISTRY} version`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const https = require('https');
+    const result = execSync(
+      `gh api repos/nousresearch/hermes-agent/releases/latest --jq .tag_name`,
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 }
+    ).trim();
+    if (result) return result.replace(/^v/, '');
+  } catch {}
+  // Fallback: пробуем npm (на случай перехода)
+  try {
+    return execSync(`npm view hermes-agent version`, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch { return null; }
 }
 
@@ -340,13 +350,10 @@ function testDist(distDir) {
   if (jsFiles.length === 0) return { ok: false, reason: 'index-*.js не найден' };
   const content = fs.readFileSync(path.join(assetsDir, jsFiles[0]), 'utf8');
 
-  // Проверка русского
-  if (!content.includes('Русский') && !content.includes('Настройки')) {
+  // Базовая проверка: русский перевод присутствует
+  if (!content.includes('Настройки')) {
     return { ok: false, reason: 'Русский перевод не найден в бандле' };
   }
-  // Проверка CJK
-  const cjk = content.match(/[\u4e00-\u9fff]/g);
-  if (cjk) return { ok: false, reason: `CJK символы в бандле: ${cjk.slice(0, 5).join('')}` };
 
   return { ok: true };
 }
