@@ -188,16 +188,17 @@ function createWindowsLauncher(resourcesDir) {
   const dataDir = getPersistentDataDir();
   const launcherJs = path.join(dataDir, 'hermes-ru-launcher.js');
 
+  // Ярлыки (латинское имя — кириллица ломает WScript.Shell COM на Windows)
   const desktop = path.join(os.homedir(), 'Desktop');
   mkdirp(desktop);
-  if (createShortcut(path.join(desktop, 'Hermes (Русский).lnk'), launcherJs)) {
-    log(`✓ Ярлык создан: ${path.join(desktop, 'Hermes (Русский).lnk')}`);
+  if (createShortcut(path.join(desktop, 'Hermes RU.lnk'), launcherJs)) {
+    log(`✓ Ярлык создан: ${path.join(desktop, 'Hermes RU.lnk')}`);
   }
 
   const startMenu = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
   mkdirp(startMenu);
-  if (createShortcut(path.join(startMenu, 'Hermes (Русский).lnk'), launcherJs)) {
-    log(`✓ Ярлык создан: ${path.join(startMenu, 'Hermes (Русский).lnk')}`);
+  if (createShortcut(path.join(startMenu, 'Hermes RU.lnk'), launcherJs)) {
+    log(`✓ Ярлык создан: ${path.join(startMenu, 'Hermes RU.lnk')}`);
   }
 
   fs.writeFileSync(path.join(dataDir, 'hermes-exe-path.txt'), findHermesExe(resourcesDir) || '');
@@ -277,7 +278,7 @@ async function commandUninstall({ restart = false } = {}) {
   const restored = restoreLoc(resourcesDir);
   const vbsDir = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
   if (fs.existsSync(vbsDir)) rm(vbsDir);
-  const desktopLnk = path.join(os.homedir(), 'Desktop', 'Hermes (Русский).lnk');
+  const desktopLnk = path.join(os.homedir(), 'Desktop', 'Hermes RU.lnk');
   if (fs.existsSync(desktopLnk)) rm(desktopLnk);
   const configPath = path.join(os.homedir(), '.hermes', 'config.yaml');
   if (fs.existsSync(configPath)) {
