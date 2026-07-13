@@ -6,3 +6,5 @@ app.asar.orig
 # чтобы не перегружать git-репозиторий.
 dist/assets/index-*.js
 dist/
+# Release artifact (uploaded to GitHub Releases, not in git)
+hermes-ru-dist-*.zip
