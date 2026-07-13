@@ -11,8 +11,6 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru)
 [![npm](https://img.shields.io/badge/npm-hermes--ru-cb3837?style=flat-square)](https://www.npmjs.com/package/hermes-ru)
 
-![Интерфейс Hermes Agent на русском](docs/screenshots/screenshot-main.png)
-
 </div>
 
 ---
