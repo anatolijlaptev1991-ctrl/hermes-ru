@@ -4,3 +4,5 @@ node_modules/
 app.asar.orig
 # Release artifact (uploaded to GitHub Releases, not in git)
 hermes-ru-dist-*.zip
+# npm pack build artifact (not in repo)
+hermes-ru-*.tgz
