@@ -130,65 +130,91 @@ function needsPatch(resourcesDir) {
   return false;
 }
 
+// Launcher вызывается ДО запуска Hermes. Если есть pending-build — делаем npm run build
 function applyTranslationInPlace(resourcesDir) {
-  // ⛔ Если Hermes запущен (а launcher вызывается перед запуском) — это нормально,
-  // но если кто-то вызвал repair вручную при работающем Hermes — блокируем.
-  // Launcher сам вызывает эту функцию ДО запуска Hermes, так что проверки нет.
-  const desktopDir = path.join(resourcesDir, '..', '..');
-  const srcDir = path.join(desktopDir, 'src', 'i18n');
-  if (!fs.existsSync(srcDir)) return false;
-
   const dataDir = DATA_DIR;
-  const ruSource = path.join(dataDir, 'ru.ts');
-  if (!fs.existsSync(ruSource)) {
-    log('⚠ ru.ts не найден в персистентном хранилище. Запустите hermes-ru install.');
-    return false;
-  }
+  const pendingPath = path.join(dataDir, 'pending-build.json');
 
-  log('Восстанавливаю перевод (defineLocale + build)...');
+  // 1. Если есть pending-build — запускаем npm run build (Hermes ещё не запущен)
+  if (fs.existsSync(pendingPath)) {
+    const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
+    const desktopDir = pending.desktopDir || path.join(resourcesDir, '..', '..');
 
-  // Копируем ru.ts
-  fs.copyFileSync(ruSource, path.join(srcDir, 'ru.ts'));
+    log(`Найден pending-build (v${pending.version}). Запускаю npm run build...`);
+    try {
+      const { execSync } = require('child_process');
+      execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
+      log('✓ Build завершён.');
 
-  // Патчим types.ts
-  const typesPath = path.join(srcDir, 'types.ts');
-  let tc = fs.readFileSync(typesPath, 'utf8');
-  if (!/'ru'/.test(tc)) {
-    tc = tc.replace(/export type Locale = 'en' \| 'zh' \| 'zh-hant' \| 'ja'/, "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ru'");
-    fs.writeFileSync(typesPath, tc, 'utf8');
-  }
-
-  // Патчим catalog.ts
-  const catalogPath = path.join(srcDir, 'catalog.ts');
-  let cc = fs.readFileSync(catalogPath, 'utf8');
-  if (!/from\s*'\.\/ru'/.test(cc)) {
-    cc = cc.replace("import { ja } from './ja'", "import { ja } from './ja'\nimport { ru } from './ru'");
-    cc = cc.replace(/(ja\n\})/, "ja,\n  ru\n}");
-    fs.writeFileSync(catalogPath, cc, 'utf8');
-  }
-
-  // Патчим languages.ts
-  const langPath = path.join(srcDir, 'languages.ts');
-  let lc = fs.readFileSync(langPath, 'utf8');
-  if (!/'ru'/.test(lc)) {
-    lc = lc.replace(/(\{[^}]*id:\s*'ja'[^}]*\})\s*\]/, "$1,\n  {\n    id: 'ru',\n    name: 'Русский',\n    englishName: 'Russian',\n    configValue: 'ru'\n  }\n]");
-    lc = lc.replace(/(ja_jp:\s*'ja')/, "$1,\n  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru'");
-    fs.writeFileSync(langPath, lc, 'utf8');
-  }
-
-  // Сборка
-  try {
-    const { execSync } = require('child_process');
-    execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
-    fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
-      version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
-    }));
-    log('✓ Перевод восстановлен!');
+      // Создаём marker (или удаляем если uninstall)
+      if (pending.version === 'uninstall') {
+        const marker = path.join(resourcesDir, '.hermes-ru-patched');
+        if (fs.existsSync(marker)) fs.rmSync(marker, { force: true });
+        log('✓ Английский восстановлен.');
+      } else {
+        fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
+          version: pending.version, patchedAt: new Date().toISOString(), method: 'defineLocale+build',
+        }));
+        log('✓ Русская локализация применена.');
+      }
+      fs.unlinkSync(pendingPath);
+    } catch (e) {
+      log(`⚠ Build не удался: ${e.message}`);
+      // Не удаляем pending — попробуем при следующем запуске
+    }
     return true;
-  } catch (e) {
-    log(`⚠ Сборка не удалась: ${e.message}`);
-    return false;
   }
+
+  // 2. Self-healing: если marker пропал (Hermes обновился) — перепатчиваем
+  const typesPath = path.join(resourcesDir, '..', '..', 'src', 'i18n', 'types.ts');
+  if (fs.existsSync(typesPath)) {
+    const tc = fs.readFileSync(typesPath, 'utf8');
+    if (!tc.includes("'ru'")) {
+      log('Перевод слетел (Hermes обновился?) — перепатчиваю...');
+      const ruSource = path.join(dataDir, 'ru.ts');
+      if (!fs.existsSync(ruSource)) {
+        log('⚠ ru.ts не найден в хранилище. Запустите hermes-ru install.');
+        return false;
+      }
+      const srcDir = path.join(resourcesDir, '..', '..', 'src', 'i18n');
+      fs.copyFileSync(ruSource, path.join(srcDir, 'ru.ts'));
+
+      // Патчим types/catalog/languages (теми же заменами что patchLoc)
+      let t = fs.readFileSync(typesPath, 'utf8');
+      t = t.replace(/export type Locale = 'en' \| 'zh' \| 'zh-hant' \| 'ja'/, "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ru'");
+      fs.writeFileSync(typesPath, t, 'utf8');
+
+      const catalogPath = path.join(srcDir, 'catalog.ts');
+      let cc = fs.readFileSync(catalogPath, 'utf8');
+      if (!/from\s*'\.\/ru'/.test(cc)) {
+        cc = cc.replace("import { ja } from './ja'", "import { ja } from './ja'\nimport { ru } from './ru'");
+        cc = cc.replace(/(ja\n\})/, "ja,\n  ru\n}");
+        fs.writeFileSync(catalogPath, cc, 'utf8');
+      }
+
+      const langPath = path.join(srcDir, 'languages.ts');
+      let lc = fs.readFileSync(langPath, 'utf8');
+      if (!/'ru'/.test(lc)) {
+        lc = lc.replace(/(\{[^}]*id:\s*'ja'[^}]*\})\s*\]/, "$1,\n  {\n    id: 'ru',\n    name: 'Русский',\n    englishName: 'Russian',\n    configValue: 'ru'\n  }\n]");
+        lc = lc.replace(/(ja_jp:\s*'ja')/, "$1,\n  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru'");
+        fs.writeFileSync(langPath, lc, 'utf8');
+      }
+
+      // Build
+      const desktopDir = path.join(resourcesDir, '..', '..');
+      try {
+        const { execSync } = require('child_process');
+        execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
+        fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
+          version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
+        }));
+        log('✓ Перевод восстановлен!');
+      } catch (e) {
+        log(`⚠ Build не удался: ${e.message}`);
+      }
+    }
+  }
+  return true;
 }
 
 

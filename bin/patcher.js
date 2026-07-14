@@ -98,22 +98,10 @@ function launchHermes(resourcesDir) {
   warn('Не удалось автоматически запустить Hermes. Откройте ярлык вручную.');
 }
 
-// Основной метод: патч исходников i18n + npm run build.
-// Регистрирует 'ru' как локаль в системе Hermes (defineLocale), НЕ трогает бандл.
+// Основной метод: патч исходников i18n (без build!).
+// Build делает launcher перед запуском Hermes — когда он закрыт.
+// Это позволяет запускать install из чата Hermes без его закрытия.
 function patchLoc(resourcesDir, distSourceDir) {
-  // ⛔ КРИТИЧНО: Hermes должен быть закрыт! npm run build пишет в dist/
-  if (isHermesRunning()) {
-    err('═══════════════════════════════════════════════════');
-    err('  ⛔ HERMES ЗАПУЩЕН! Установка отменена.');
-    err('  npm run build запишет в dist/ во время работы');
-    err('  Hermes и сломает его (белый экран / краш).');
-    err('───────────────────────────────────────────────────');
-    err('  1. Закройте Hermes полностью');
-    err('  2. Запустите hermes-ru install из терминала');
-    err('═══════════════════════════════════════════════════');
-    return false;
-  }
-
   const desktopDir = path.join(resourcesDir, '..', '..'); // apps/desktop
   const srcDir = path.join(desktopDir, 'src', 'i18n');
 
@@ -186,35 +174,19 @@ function patchLoc(resourcesDir, distSourceDir) {
     log('  languages.ts: ru уже присутствует');
   }
 
-  // 5. Сборка
-  log('Запускаю сборку (npm run build)...');
-  try {
-    execSync('npm run build', {
-      cwd: desktopDir,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 300000,
-    });
-  } catch (e) {
-    err('Сборка не удалась: ' + e.message);
-    return false;
-  }
-  log('✓ Сборка завершена');
-
-  // 6. Marker
-  fs.writeFileSync(path.join(resourcesDir, PATCH_MARKER), JSON.stringify({
-    version: VERSION, patchedAt: new Date().toISOString(), method: 'defineLocale+build',
+  // 5. Создаём флаг для launcher — нужен build
+  const dataDir = getPersistentDataDir();
+  fs.writeFileSync(path.join(dataDir, 'pending-build.json'), JSON.stringify({
+    desktopDir,
+    version: VERSION,
+    createdAt: new Date().toISOString(),
   }));
 
-  log('✓ Локализация применена через defineLocale!');
+  log('✓ Исходники пропатчены. Build выполнится при следующем запуске через ярлык «Hermes RU».');
   return true;
 }
 
 function restoreLoc(resourcesDir) {
-  // ⛔ КРИТИЧНО: Hermes должен быть закрыт!
-  if (isHermesRunning()) {
-    err('⛔ Hermes запущен! Закройте его перед uninstall (npm run build перезапишет dist/).');
-    return false;
-  }
   const desktopDir = path.join(resourcesDir, '..', '..');
   const srcDir = path.join(desktopDir, 'src', 'i18n');
   if (!fs.existsSync(srcDir)) return false;
@@ -246,23 +218,21 @@ function restoreLoc(resourcesDir) {
   const langPath = path.join(srcDir, 'languages.ts');
   if (fs.existsSync(langPath)) {
     let c = fs.readFileSync(langPath, 'utf8');
-    // Удаляем блок { id: 'ru', ... }
     c = c.replace(/,\s*\{\s*id:\s*'ru'[\s\S]*?\}\s*\]/, '\n]');
-    // Удаляем алиасы ru
     c = c.replace(/,\n\s*ru:\s*'ru'[\s\S]*?ru_ru:\s*'ru'/, '');
     fs.writeFileSync(langPath, c, 'utf8');
   }
 
-  // Пересборка
-  log('Пересобираю...');
-  try {
-    execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
-    log('✓ Английский восстановлен.');
-  } catch (e) {
-    warn('Пересборка не удалась. Переустановите Hermes.');
-  }
+  // Флаг для launcher — нужен rebuild (обратный)
+  const dataDir = getPersistentDataDir();
+  fs.writeFileSync(path.join(dataDir, 'pending-build.json'), JSON.stringify({
+    desktopDir,
+    version: 'uninstall',
+    createdAt: new Date().toISOString(),
+  }));
 
   rm(path.join(resourcesDir, PATCH_MARKER));
+  log('✓ Исходники восстановлены. Build выполнится при следующем запуске.');
   return true;
 }
 
