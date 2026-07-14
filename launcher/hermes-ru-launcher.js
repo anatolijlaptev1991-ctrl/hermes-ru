@@ -131,7 +131,9 @@ function needsPatch(resourcesDir) {
 }
 
 function applyTranslationInPlace(resourcesDir) {
-  // Делегируем в patchLoc из patcher.js — копируем ru.ts, патчим исходники, билдим
+  // ⛔ Если Hermes запущен (а launcher вызывается перед запуском) — это нормально,
+  // но если кто-то вызвал repair вручную при работающем Hermes — блокируем.
+  // Launcher сам вызывает эту функцию ДО запуска Hermes, так что проверки нет.
   const desktopDir = path.join(resourcesDir, '..', '..');
   const srcDir = path.join(desktopDir, 'src', 'i18n');
   if (!fs.existsSync(srcDir)) return false;

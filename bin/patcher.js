@@ -56,12 +56,22 @@ function fileHash(filePath) {
 }
 
 function isHermesRunning() {
+  // Метод 1: tasklist
   try {
     const out = execSync('tasklist /FI "IMAGENAME eq Hermes.exe"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-    return /Hermes\.exe/i.test(out);
-  } catch (e) {
-    return false;
-  }
+    if (/Hermes\.exe/i.test(out)) return true;
+  } catch (e) {}
+  // Метод 2: PowerShell Get-Process (надёжнее)
+  try {
+    const out = execSync('powershell -NoProfile -Command "Get-Process Hermes -ErrorAction SilentlyContinue | Select-Object -First 1 | Measure-Object | Select-Object -ExpandProperty Count"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (parseInt(out) > 0) return true;
+  } catch (e) {}
+  // Метод 3: wmic
+  try {
+    const out = execSync('wmic process where "name=\'Hermes.exe\'" get processid /value 2>nul', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    if (/ProcessId=\d+/.test(out)) return true;
+  } catch (e) {}
+  return false;
 }
 
 function killHermes() {
@@ -91,6 +101,19 @@ function launchHermes(resourcesDir) {
 // Основной метод: патч исходников i18n + npm run build.
 // Регистрирует 'ru' как локаль в системе Hermes (defineLocale), НЕ трогает бандл.
 function patchLoc(resourcesDir, distSourceDir) {
+  // ⛔ КРИТИЧНО: Hermes должен быть закрыт! npm run build пишет в dist/
+  if (isHermesRunning()) {
+    err('═══════════════════════════════════════════════════');
+    err('  ⛔ HERMES ЗАПУЩЕН! Установка отменена.');
+    err('  npm run build запишет в dist/ во время работы');
+    err('  Hermes и сломает его (белый экран / краш).');
+    err('───────────────────────────────────────────────────');
+    err('  1. Закройте Hermes полностью');
+    err('  2. Запустите hermes-ru install из терминала');
+    err('═══════════════════════════════════════════════════');
+    return false;
+  }
+
   const desktopDir = path.join(resourcesDir, '..', '..'); // apps/desktop
   const srcDir = path.join(desktopDir, 'src', 'i18n');
 
@@ -187,6 +210,11 @@ function patchLoc(resourcesDir, distSourceDir) {
 }
 
 function restoreLoc(resourcesDir) {
+  // ⛔ КРИТИЧНО: Hermes должен быть закрыт!
+  if (isHermesRunning()) {
+    err('⛔ Hermes запущен! Закройте его перед uninstall (npm run build перезапишет dist/).');
+    return false;
+  }
   const desktopDir = path.join(resourcesDir, '..', '..');
   const srcDir = path.join(desktopDir, 'src', 'i18n');
   if (!fs.existsSync(srcDir)) return false;
