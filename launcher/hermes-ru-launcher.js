@@ -119,59 +119,74 @@ function copyDirSync(src, dest) {
 }
 
 function needsPatch(resourcesDir) {
-  const unpackedDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
-  if (!fs.existsSync(unpackedDist)) return true;
   const markerPath = path.join(resourcesDir, '.hermes-ru-patched');
-  return !fs.existsSync(markerPath);
+  if (!fs.existsSync(markerPath)) return true;
+  // Проверяем наличие ru в types.ts (если Hermes обновился — слетит)
+  const typesPath = path.join(resourcesDir, '..', '..', 'src', 'i18n', 'types.ts');
+  if (fs.existsSync(typesPath)) {
+    const c = fs.readFileSync(typesPath, 'utf8');
+    return !c.includes("'ru'");
+  }
+  return false;
 }
 
 function applyTranslationInPlace(resourcesDir) {
+  // Делегируем в patchLoc из patcher.js — копируем ru.ts, патчим исходники, билдим
+  const desktopDir = path.join(resourcesDir, '..', '..');
+  const srcDir = path.join(desktopDir, 'src', 'i18n');
+  if (!fs.existsSync(srcDir)) return false;
+
   const dataDir = DATA_DIR;
-  const translationsPath = path.join(dataDir, 'translations-map.json');
-  if (!fs.existsSync(translationsPath)) {
-    log('⚠ translations-map.json не найден. Запустите hermes-ru install.');
-    return false;
-  }
-  const translations = JSON.parse(fs.readFileSync(translationsPath, 'utf8'));
-
-  const assetsDir = path.join(resourcesDir, 'app.asar.unpacked', 'dist', 'assets');
-  if (!fs.existsSync(assetsDir)) {
-    log('⚠ app.asar.unpacked/dist/assets не найден.');
+  const ruSource = path.join(dataDir, 'ru.ts');
+  if (!fs.existsSync(ruSource)) {
+    log('⚠ ru.ts не найден в персистентном хранилище. Запустите hermes-ru install.');
     return false;
   }
 
-  const files = fs.readdirSync(assetsDir).filter(f => /^index-.*\.(js|css)$/.test(f));
-  let total = 0;
+  log('Восстанавливаю перевод (defineLocale + build)...');
 
-  for (const file of files) {
-    const filePath = path.join(assetsDir, file);
-    let content = fs.readFileSync(filePath, 'utf8');
-    let count = 0;
-    for (const [en, ru] of Object.entries(translations)) {
-      const escapedEn = en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const patterns = [new RegExp(`"${escapedEn}"`, 'g'), new RegExp(`'${escapedEn}'`, 'g')];
-      const escapedRu = ru.replace(/\$/g, '$$$$').replace(/"/g, '\\"');
-      for (const pattern of patterns) {
-        const m = content.match(pattern);
-        if (m) { content = content.replace(pattern, `"${escapedRu}"`); count += m.length; }
-      }
-    }
-    if (count > 0) {
-      const tmp = filePath + '.tmp';
-      fs.writeFileSync(tmp, content, 'utf8');
-      fs.renameSync(tmp, filePath);
-      total += count;
-    }
+  // Копируем ru.ts
+  fs.copyFileSync(ruSource, path.join(srcDir, 'ru.ts'));
+
+  // Патчим types.ts
+  const typesPath = path.join(srcDir, 'types.ts');
+  let tc = fs.readFileSync(typesPath, 'utf8');
+  if (!/'ru'/.test(tc)) {
+    tc = tc.replace(/export type Locale = 'en' \| 'zh' \| 'zh-hant' \| 'ja'/, "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ru'");
+    fs.writeFileSync(typesPath, tc, 'utf8');
   }
 
-  if (total > 0) {
+  // Патчим catalog.ts
+  const catalogPath = path.join(srcDir, 'catalog.ts');
+  let cc = fs.readFileSync(catalogPath, 'utf8');
+  if (!/from\s*'\.\/ru'/.test(cc)) {
+    cc = cc.replace("import { ja } from './ja'", "import { ja } from './ja'\nimport { ru } from './ru'");
+    cc = cc.replace(/(ja\n\})/, "ja,\n  ru\n}");
+    fs.writeFileSync(catalogPath, cc, 'utf8');
+  }
+
+  // Патчим languages.ts
+  const langPath = path.join(srcDir, 'languages.ts');
+  let lc = fs.readFileSync(langPath, 'utf8');
+  if (!/'ru'/.test(lc)) {
+    lc = lc.replace(/(\{[^}]*id:\s*'ja'[^}]*\})\s*\]/, "$1,\n  {\n    id: 'ru',\n    name: 'Русский',\n    englishName: 'Russian',\n    configValue: 'ru'\n  }\n]");
+    lc = lc.replace(/(ja_jp:\s*'ja')/, "$1,\n  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru'");
+    fs.writeFileSync(langPath, lc, 'utf8');
+  }
+
+  // Сборка
+  try {
+    const { execSync } = require('child_process');
+    execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
     fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
-      version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'in-place',
+      version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
     }));
-    log(`✓ Перевод восстановлен (${total} замен).`);
+    log('✓ Перевод восстановлен!');
     return true;
+  } catch (e) {
+    log(`⚠ Сборка не удалась: ${e.message}`);
+    return false;
   }
-  return false;
 }
 
 

@@ -88,133 +88,153 @@ function launchHermes(resourcesDir) {
   warn('Не удалось автоматически запустить Hermes. Откройте ярлык вручную.');
 }
 
-// Основной метод: IN-PLACE string replacement.
-// НЕ заменяет и НЕ удаляет файлы. Патчит строки прямо внутри index-*.js.
-// Безопасно даже во время работы Hermes — атомарная запись каждого файла.
+// Основной метод: патч исходников i18n + npm run build.
+// Регистрирует 'ru' как локаль в системе Hermes (defineLocale), НЕ трогает бандл.
 function patchLoc(resourcesDir, distSourceDir) {
-  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
-  if (!fs.existsSync(unpackedDir)) {
-    err('app.asar.unpacked не найден.');
-    return false;
-  }
-  const destDist = path.join(unpackedDir, 'dist');
-  const assetsDir = path.join(destDist, 'assets');
-  if (!fs.existsSync(assetsDir)) {
-    err('app.asar.unpacked/dist/assets не найден.');
+  const desktopDir = path.join(resourcesDir, '..', '..'); // apps/desktop
+  const srcDir = path.join(desktopDir, 'src', 'i18n');
+
+  if (!fs.existsSync(srcDir)) {
+    err('Исходники i18n не найдены. Установите Hermes из официального источника.');
     return false;
   }
 
-  // Загружаем карту переводов
-  const translationsPath = path.join(__dirname, '..', 'config', 'translations-map.json');
-  if (!fs.existsSync(translationsPath)) {
-    err('translations-map.json не найден в пакете.');
+  log('Патчу систему i18n Hermes (defineLocale)...');
+
+  // 1. Копируем ru.ts в src/i18n/
+  const ruSource = path.join(__dirname, '..', 'src', 'i18n', 'ru.ts');
+  if (!fs.existsSync(ruSource)) {
+    err('ru.ts не найден в пакете hermes-ru.');
     return false;
   }
-  const translations = JSON.parse(fs.readFileSync(translationsPath, 'utf8'));
-  const entryCount = Object.keys(translations).length;
-  log(`Карта переводов: ${entryCount} строк.`);
+  const targetRu = path.join(srcDir, 'ru.ts');
+  fs.copyFileSync(ruSource, targetRu);
+  log('✓ ru.ts скопирован в src/i18n/');
 
-  // Патчим каждый index-*.js и index-*.css
-  const files = fs.readdirSync(assetsDir).filter(f =>
-    /^index-.*\.(js|css)$/.test(f)
-  );
-  let totalReplacements = 0;
-
-  for (const file of files) {
-    const filePath = path.join(assetsDir, file);
-    let content = fs.readFileSync(filePath, 'utf8');
-    let fileReplacements = 0;
-
-    for (const [en, ru] of Object.entries(translations)) {
-      // В минифицированном бандле строки могут быть в кавычках: "Settings" или 'Settings'
-      // Экранируем спецсимволы в EN для использования в regex
-      const escapedEn = en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Ищем как "EN" так и 'EN'
-      const patterns = [
-        new RegExp(`"${escapedEn}"`, 'g'),
-        new RegExp(`'${escapedEn}'`, 'g'),
-      ];
-      const escapedRu = ru.replace(/\$/g, '$$$$'); // escape $ in replacement
-      for (const pattern of patterns) {
-        const matches = content.match(pattern);
-        if (matches) {
-          content = content.replace(pattern, `"${escapedRu.replace(/"/g, '\\"')}"`);
-          fileReplacements += matches.length;
-        }
-      }
-    }
-
-    if (fileReplacements > 0) {
-      // Атомарная запись: temp → rename
-      const tmpPath = filePath + '.tmp';
-      fs.writeFileSync(tmpPath, content, 'utf8');
-      fs.renameSync(tmpPath, filePath);
-      log(`  ${file}: ${fileReplacements} замен`);
-      totalReplacements += fileReplacements;
-    }
+  // 2. Патчим types.ts: добавляем 'ru' в Locale
+  const typesPath = path.join(srcDir, 'types.ts');
+  let typesContent = fs.readFileSync(typesPath, 'utf8');
+  if (!/'ru'/.test(typesContent)) {
+    typesContent = typesContent.replace(
+      /export type Locale = 'en' \| 'zh' \| 'zh-hant' \| 'ja'/,
+      "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ru'"
+    );
+    fs.writeFileSync(typesPath, typesContent, 'utf8');
+    log('✓ types.ts: добавлен ru в Locale');
+  } else {
+    log('  types.ts: ru уже присутствует');
   }
 
-  if (totalReplacements === 0) {
-    warn('Не найдено строк для замены. Возможно, перевод уже применён или бандл изменился.');
+  // 3. Патчим catalog.ts: импорт + регистрация ru
+  const catalogPath = path.join(srcDir, 'catalog.ts');
+  let catalogContent = fs.readFileSync(catalogPath, 'utf8');
+  if (!/import.*\{.*ru.*\}.*from.*'\.\/ru'/.test(catalogContent)) {
+    catalogContent = catalogContent.replace(
+      "import { ja } from './ja'",
+      "import { ja } from './ja'\nimport { ru } from './ru'"
+    );
+    catalogContent = catalogContent.replace(
+      /export const TRANSLATIONS.*?\{[\s\S]*?ja\n\}/,
+      "export const TRANSLATIONS: Record<Locale, Translations> = {\n  en,\n  zh,\n  'zh-hant': zhHant,\n  ja,\n  ru\n}"
+    );
+    fs.writeFileSync(catalogPath, catalogContent, 'utf8');
+    log('✓ catalog.ts: ru зарегистрирован');
+  } else {
+    log('  catalog.ts: ru уже импортирован');
+  }
+
+  // 4. Патчим languages.ts: добавляем ru в LOCALE_OPTIONS и алиасы
+  const langPath = path.join(srcDir, 'languages.ts');
+  let langContent = fs.readFileSync(langPath, 'utf8');
+  if (!/'ru'/.test(langContent)) {
+    // Добавляем в LOCALE_OPTIONS
+    langContent = langContent.replace(
+      /(\{\s*id:\s*'ja',[\s\S]*?\})\s*\]/,
+      "$1,\n  {\n    id: 'ru',\n    name: 'Русский',\n    englishName: 'Russian',\n    configValue: 'ru'\n  }\n]"
+    );
+    // Добавляем алиасы
+    langContent = langContent.replace(
+      /('ja-jp':\s*'ja',?\s*\n\s*ja_jp:\s*'ja')/,
+      "$1,\n  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru'"
+    );
+    fs.writeFileSync(langPath, langContent, 'utf8');
+    log('✓ languages.ts: добавлен Русский');
+  } else {
+    log('  languages.ts: ru уже присутствует');
+  }
+
+  // 5. Сборка
+  log('Запускаю сборку (npm run build)...');
+  try {
+    execSync('npm run build', {
+      cwd: desktopDir,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 300000,
+    });
+  } catch (e) {
+    err('Сборка не удалась: ' + e.message);
     return false;
   }
+  log('✓ Сборка завершена');
 
-  // Создаём marker
+  // 6. Marker
   fs.writeFileSync(path.join(resourcesDir, PATCH_MARKER), JSON.stringify({
-    version: VERSION, patchedAt: new Date().toISOString(), method: 'in-place-string-replace',
+    version: VERSION, patchedAt: new Date().toISOString(), method: 'defineLocale+build',
   }));
 
-  log(`✓ Локализация применена (${totalReplacements} замен в ${files.length} файлах)!`);
+  log('✓ Локализация применена через defineLocale!');
   return true;
 }
 
 function restoreLoc(resourcesDir) {
-  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
-  if (!fs.existsSync(unpackedDir)) {
-    err('app.asar.unpacked не найден.');
-    return false;
+  const desktopDir = path.join(resourcesDir, '..', '..');
+  const srcDir = path.join(desktopDir, 'src', 'i18n');
+  if (!fs.existsSync(srcDir)) return false;
+
+  log('Восстанавливаю оригинальные исходники i18n...');
+
+  // Удаляем ru.ts
+  const ruPath = path.join(srcDir, 'ru.ts');
+  if (fs.existsSync(ruPath)) { fs.unlinkSync(ruPath); log('✓ ru.ts удалён'); }
+
+  // Убираем ru из types.ts
+  const typesPath = path.join(srcDir, 'types.ts');
+  if (fs.existsSync(typesPath)) {
+    let c = fs.readFileSync(typesPath, 'utf8');
+    c = c.replace(/\s*\|\s*'ru'/, '');
+    fs.writeFileSync(typesPath, c, 'utf8');
   }
-  const destDist = path.join(unpackedDir, 'dist');
-  const assetsDir = path.join(destDist, 'assets');
-  if (!fs.existsSync(assetsDir)) return false;
 
-  // Обратная замена: RU → EN
-  const translationsPath = path.join(__dirname, '..', 'config', 'translations-map.json');
-  if (!fs.existsSync(translationsPath)) return false;
-  const translations = JSON.parse(fs.readFileSync(translationsPath, 'utf8'));
+  // Убираем ru из catalog.ts
+  const catalogPath = path.join(srcDir, 'catalog.ts');
+  if (fs.existsSync(catalogPath)) {
+    let c = fs.readFileSync(catalogPath, 'utf8');
+    c = c.replace(/\nimport \{ ru \} from '\.\/ru'/, '');
+    c = c.replace(/,\n\s*ru\n\}/, '\n}');
+    fs.writeFileSync(catalogPath, c, 'utf8');
+  }
 
-  const files = fs.readdirSync(assetsDir).filter(f => /^index-.*\.(js|css)$/.test(f));
-  let totalReplacements = 0;
+  // Убираем ru из languages.ts
+  const langPath = path.join(srcDir, 'languages.ts');
+  if (fs.existsSync(langPath)) {
+    let c = fs.readFileSync(langPath, 'utf8');
+    // Удаляем блок { id: 'ru', ... }
+    c = c.replace(/,\s*\{\s*id:\s*'ru'[\s\S]*?\}\s*\]/, '\n]');
+    // Удаляем алиасы ru
+    c = c.replace(/,\n\s*ru:\s*'ru'[\s\S]*?ru_ru:\s*'ru'/, '');
+    fs.writeFileSync(langPath, c, 'utf8');
+  }
 
-  for (const file of files) {
-    const filePath = path.join(assetsDir, file);
-    let content = fs.readFileSync(filePath, 'utf8');
-    let fileReplacements = 0;
-
-    for (const [en, ru] of Object.entries(translations)) {
-      const escapedRu = ru.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = new RegExp(`"${escapedRu}"`, 'g');
-      const matches = content.match(pattern);
-      if (matches) {
-        content = content.replace(pattern, `"${en.replace(/"/g, '\\"').replace(/\$/g, '$$$$')}"`);
-        fileReplacements += matches.length;
-      }
-    }
-
-    if (fileReplacements > 0) {
-      const tmpPath = filePath + '.tmp';
-      fs.writeFileSync(tmpPath, content, 'utf8');
-      fs.renameSync(tmpPath, filePath);
-      totalReplacements += fileReplacements;
-    }
+  // Пересборка
+  log('Пересобираю...');
+  try {
+    execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
+    log('✓ Английский восстановлен.');
+  } catch (e) {
+    warn('Пересборка не удалась. Переустановите Hermes.');
   }
 
   rm(path.join(resourcesDir, PATCH_MARKER));
-  if (totalReplacements > 0) {
-    log(`✓ Английский восстановлен (${totalReplacements} обратных замен).`);
-  } else {
-    log('✓ Marker удалён. Если остался русский — переустановите Hermes.');
-  }
   return true;
 }
 
@@ -228,11 +248,11 @@ function stageToPersistent(resourcesDir) {
   const dataDir = getPersistentDataDir();
   log('Копирую перевод в персистентное хранилище...');
 
-  // Копируем translations-map.json (для launcher in-place)
-  const mapSource = path.join(__dirname, '..', 'config', 'translations-map.json');
-  if (fs.existsSync(mapSource)) {
-    fs.copyFileSync(mapSource, path.join(dataDir, 'translations-map.json'));
-    log('✓ Карта переводов скопирована');
+  // Копируем ru.ts (для launcher self-healing)
+  const ruSource = path.join(__dirname, '..', 'src', 'i18n', 'ru.ts');
+  if (fs.existsSync(ruSource)) {
+    fs.copyFileSync(ruSource, path.join(dataDir, 'ru.ts'));
+    log('✓ ru.ts скопирован');
   }
 
   fs.writeFileSync(path.join(dataDir, 'version.json'), JSON.stringify({
