@@ -88,105 +88,50 @@ function launchHermes(resourcesDir) {
   warn('Не удалось автоматически запустить Hermes. Откройте ярлык вручную.');
 }
 
-// Основной метод: Hermes берёт dist из app.asar.unpacked/dist.
-// Если Hermes запущен — staging (файлы в dist.ru.staged, launcher применит).
-// Если Hermes НЕ запущен — прямая атомарная замена.
-function patchLoc(resourcesDir, distSourceDir, { force = false } = {}) {
-  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
-  if (!fs.existsSync(unpackedDir)) {
-    err('app.asar.unpacked не найден. Этот метод установки не поддерживается для вашей сборки.');
-    return false;
-  }
-  const destDist = path.join(unpackedDir, 'dist');
-  const stagingDist = path.join(unpackedDir, 'dist.ru.staged');
-  const backupDist = path.join(unpackedDir, 'dist.ru.bak');
+// Основной метод: ВСЕГДА staging в персистентное хранилище.
+// Никогда НЕ трогает app.asar.unpacked/dist напрямую.
+// Launcher применит перевод при следующем запуске Hermes.
+function patchLoc(resourcesDir, distSourceDir) {
+  const dataDir = getPersistentDataDir();
+  const persDist = path.join(dataDir, 'dist');
 
-  const hermesRunning = isHermesRunning();
+  // Копируем перевод в персистентное хранилище
+  log('Подготавливаю перевод (staging в персистентное хранилище)...');
+  if (fs.existsSync(persDist)) rm(persDist);
+  recursiveCopy(distSourceDir, persDist);
 
-  if (hermesRunning && !force) {
-    // ─── STAGING MODE: Hermes работает, НЕ трогаем живые файлы ───
-    log('Hermes запущен — режим staging (файлы подготовлены, применятся при следующем запуске).');
-    if (fs.existsSync(stagingDist)) rm(stagingDist);
-    recursiveCopy(distSourceDir, stagingDist);
-    // Флаг для launcher
-    const dataDir = getPersistentDataDir();
-    fs.writeFileSync(path.join(dataDir, 'pending-stage.json'), JSON.stringify({
-      resourcesDir,
-      stagedAt: new Date().toISOString(),
-      version: VERSION,
-    }));
-    log('✓ Файлы перевода подготовлены в staging.');
-    log('  Закройте Hermes и запустите через ярлык «Hermes RU» — перевод применится автоматически.');
-    return true;
-  }
-
-  // ─── DIRECT MODE: Hermes закрыт — атомарная замена ───
-  log('Применяем перевод (атомарная замена)...');
-
-  // Шаг 1: копируем в staging-папку
-  if (fs.existsSync(stagingDist)) rm(stagingDist);
-  recursiveCopy(distSourceDir, stagingDist);
-
-  // Шаг 2: backup текущего dist → dist.ru.bak
-  if (fs.existsSync(backupDist)) rm(backupDist);
-  if (fs.existsSync(destDist)) {
-    try { fs.renameSync(destDist, backupDist); }
-    catch (e) {
-      warn('Прямой rename не удался, удаляю старый dist...');
-      rm(destDist);
-    }
-  }
-
-  // Шаг 3: staging → dist (атомарный rename)
-  try { fs.renameSync(stagingDist, destDist); }
-  catch (e) {
-    err('Не удалось переместить новый dist: ' + e.message);
-    if (fs.existsSync(backupDist)) { try { fs.renameSync(backupDist, destDist); } catch {} }
-    return false;
-  }
-
-  // Шаг 4: cleanup
-  if (fs.existsSync(backupDist)) rm(backupDist);
-
-  // Удаляем pending-stage если он был
-  const pendingPath = path.join(getPersistentDataDir(), 'pending-stage.json');
-  if (fs.existsSync(pendingPath)) rm(pendingPath);
-
-  fs.writeFileSync(path.join(resourcesDir, PATCH_MARKER), JSON.stringify({
-    version: VERSION, patchedAt: new Date().toISOString(), method: 'app.asar.unpacked/dist',
+  // Создаём флаг для launcher — перевод ждёт применения
+  fs.writeFileSync(path.join(dataDir, 'pending-stage.json'), JSON.stringify({
+    resourcesDir,
+    stagedAt: new Date().toISOString(),
+    version: VERSION,
   }));
-  log('✓ Локализация применена (атомарно)!');
+
+  log('✓ Перевод подготовлен в безопасном хранилище.');
+  log('  Ни один рабочий файл Hermes не был изменён.');
+  log('  Перевод применится автоматически при следующем запуске через ярлык «Hermes RU».');
   return true;
 }
 
-function restoreLoc(resourcesDir, { force = false } = {}) {
-  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
-  if (!fs.existsSync(unpackedDir)) {
-    err('app.asar.unpacked не найден.');
-    return false;
-  }
-  // Проверка: Hermes НЕ должен работать
-  if (!force && isHermesRunning()) {
-    err('ОШИБКА: Hermes запущен! Закройте Hermes и повторите.');
-    return false;
-  }
-  const destDist = path.join(unpackedDir, 'dist');
-  // Мы не делали backup dist отдельно — восстанавливаем из app.asar (оригинальный dist там есть)
-  const asarDist = path.join(unpackedDir, '_orig_dist_extract');
-  try {
-    const asar = require('@electron/asar');
-    if (fs.existsSync(asarDist)) rm(asarDist);
-    mkdirp(asarDist);
-    asar.extractAll(path.join(resourcesDir, 'app.asar'), asarDist);
-    if (fs.existsSync(destDist)) rm(destDist);
-    recursiveCopy(path.join(asarDist, 'dist'), destDist);
-    rm(asarDist);
-  } catch (e) {
-    warn('Не удалось восстановить dist из asar: ' + e.message);
-    warn('Переустановите Hermes, чтобы вернуть оригинальный dist.');
-  }
-  rm(path.join(resourcesDir, PATCH_MARKER));
-  log('✓ Оригинальный dist восстановлен!');
+function restoreLoc(resourcesDir) {
+  // Ничего не делаем с app.asar.unpacked/dist напрямую.
+  // Удаляем staging и pending — launcher увидит отсутствие перевода и не применит его.
+  // Пользователю нужно переустановить Hermes для восстановления оригинального dist.
+  const dataDir = getPersistentDataDir();
+  const persDist = path.join(dataDir, 'dist');
+  const pendingPath = path.join(dataDir, 'pending-stage.json');
+
+  if (fs.existsSync(persDist)) rm(persDist);
+  if (fs.existsSync(pendingPath)) rm(pendingPath);
+
+  // Удаляем marker
+  const marker = path.join(resourcesDir, PATCH_MARKER);
+  if (fs.existsSync(marker)) rm(marker);
+
+  log('✓ Перевод удалён из хранилища.');
+  log('  Для полного восстановления английского интерфейса:');
+  log('  1. Удалите ярлык «Hermes RU»');
+  log('  2. Переустановите Hermes (установка поверх сохранит данные)');
   return true;
 }
 
@@ -304,40 +249,22 @@ async function commandInstall({ restart = false } = {}) {
     process.exit(1);
   }
 
-  if (isHermesRunning()) {
-    console.log('\n╔════════════════════════════════════════════════╗');
-    console.log('║  ⚡ Hermes запущен — режим STAGING              ║');
-    console.log('║                                                ║');
-    console.log('║  Файлы перевода подготовлены БЕЗ изменения     ║');
-    console.log('║  рабочих файлов Hermes. Ничего не сломалось.    ║');
-    console.log('║                                                ║');
-    console.log('║  ПЕРЕЗАПУСТИТЕ HERMES через ярлык «Hermes RU»  ║');
-    console.log('║  Перевод применится автоматически.             ║');
-    console.log('╚════════════════════════════════════════════════╝\n');
-  }
-
-  const ok = patchLoc(resourcesDir, distSourceDir, { force });
+  const ok = patchLoc(resourcesDir, distSourceDir);
   if (!ok) process.exit(1);
   stageToPersistent(resourcesDir);
   createWindowsLauncher(resourcesDir);
   setConfigLanguage();
 
-  if (restart && !isHermesRunning()) {
-    console.log('\n╔════════════════════════════════════════════════╗');
-    console.log('║  ✓ Установка завершена и Hermes запущен!        ║');
-    console.log('╚════════════════════════════════════════════════╝\n');
-    launchHermes(resourcesDir);
-  } else {
-    console.log('\n╔════════════════════════════════════════════════╗');
-    console.log('║  ✓ Установка завершена!                        ║');
-    console.log('║                                                ║');
-    console.log('║  ПЕРЕЗАПУСТИТЕ HERMES вручную:                  ║');
-    console.log('║    ярлык «Hermes (Русский)» на рабочем столе   ║');
-    console.log('║  или через меню Пуск                          ║');
-    console.log('║                                                ║');
-    console.log('║  Локализация восстановится после обновлений.   ║');
-    console.log('╚════════════════════════════════════════════════╝\n');
-  }
+  console.log('\n╔════════════════════════════════════════════════╗');
+  console.log('║  ✓ Установка завершена!                        ║');
+  console.log('║                                                ║');
+  console.log('║  ПЕРЕЗАПУСТИТЕ HERMES через ярлык:              ║');
+  console.log('║    «Hermes RU» на рабочем столе                ║');
+  console.log('║    или через меню Пуск                         ║');
+  console.log('║                                                ║');
+  console.log('║  Перевод применится автоматически.             ║');
+  console.log('║  (при запуске через ярлык, а не обычный)       ║');
+  console.log('╚════════════════════════════════════════════════╝\n');
 }
 
 async function commandUninstall({ restart = false } = {}) {
