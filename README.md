@@ -9,6 +9,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru/commits)
 [![Hermes](https://img.shields.io/badge/Hermes%20Agent-v0.18.2-6366f1?style=flat-square)](https://github.com/nousresearch/hermes-agent)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru)
+[![Status](https://img.shields.io/badge/status-alpha%20testing-orange?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru)
 [![npm](https://img.shields.io/npm/v/@anatolijlaptev1991/hermes-ru?style=flat-square&label=npm)](https://www.npmjs.com/package/@anatolijlaptev1991/hermes-ru)
 
 </div>
