@@ -88,50 +88,133 @@ function launchHermes(resourcesDir) {
   warn('Не удалось автоматически запустить Hermes. Откройте ярлык вручную.');
 }
 
-// Основной метод: ВСЕГДА staging в персистентное хранилище.
-// Никогда НЕ трогает app.asar.unpacked/dist напрямую.
-// Launcher применит перевод при следующем запуске Hermes.
+// Основной метод: IN-PLACE string replacement.
+// НЕ заменяет и НЕ удаляет файлы. Патчит строки прямо внутри index-*.js.
+// Безопасно даже во время работы Hermes — атомарная запись каждого файла.
 function patchLoc(resourcesDir, distSourceDir) {
-  const dataDir = getPersistentDataDir();
-  const persDist = path.join(dataDir, 'dist');
+  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
+  if (!fs.existsSync(unpackedDir)) {
+    err('app.asar.unpacked не найден.');
+    return false;
+  }
+  const destDist = path.join(unpackedDir, 'dist');
+  const assetsDir = path.join(destDist, 'assets');
+  if (!fs.existsSync(assetsDir)) {
+    err('app.asar.unpacked/dist/assets не найден.');
+    return false;
+  }
 
-  // Копируем перевод в персистентное хранилище
-  log('Подготавливаю перевод (staging в персистентное хранилище)...');
-  if (fs.existsSync(persDist)) rm(persDist);
-  recursiveCopy(distSourceDir, persDist);
+  // Загружаем карту переводов
+  const translationsPath = path.join(__dirname, '..', 'config', 'translations-map.json');
+  if (!fs.existsSync(translationsPath)) {
+    err('translations-map.json не найден в пакете.');
+    return false;
+  }
+  const translations = JSON.parse(fs.readFileSync(translationsPath, 'utf8'));
+  const entryCount = Object.keys(translations).length;
+  log(`Карта переводов: ${entryCount} строк.`);
 
-  // Создаём флаг для launcher — перевод ждёт применения
-  fs.writeFileSync(path.join(dataDir, 'pending-stage.json'), JSON.stringify({
-    resourcesDir,
-    stagedAt: new Date().toISOString(),
-    version: VERSION,
+  // Патчим каждый index-*.js и index-*.css
+  const files = fs.readdirSync(assetsDir).filter(f =>
+    /^index-.*\.(js|css)$/.test(f)
+  );
+  let totalReplacements = 0;
+
+  for (const file of files) {
+    const filePath = path.join(assetsDir, file);
+    let content = fs.readFileSync(filePath, 'utf8');
+    let fileReplacements = 0;
+
+    for (const [en, ru] of Object.entries(translations)) {
+      // В минифицированном бандле строки могут быть в кавычках: "Settings" или 'Settings'
+      // Экранируем спецсимволы в EN для использования в regex
+      const escapedEn = en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Ищем как "EN" так и 'EN'
+      const patterns = [
+        new RegExp(`"${escapedEn}"`, 'g'),
+        new RegExp(`'${escapedEn}'`, 'g'),
+      ];
+      const escapedRu = ru.replace(/\$/g, '$$$$'); // escape $ in replacement
+      for (const pattern of patterns) {
+        const matches = content.match(pattern);
+        if (matches) {
+          content = content.replace(pattern, `"${escapedRu.replace(/"/g, '\\"')}"`);
+          fileReplacements += matches.length;
+        }
+      }
+    }
+
+    if (fileReplacements > 0) {
+      // Атомарная запись: temp → rename
+      const tmpPath = filePath + '.tmp';
+      fs.writeFileSync(tmpPath, content, 'utf8');
+      fs.renameSync(tmpPath, filePath);
+      log(`  ${file}: ${fileReplacements} замен`);
+      totalReplacements += fileReplacements;
+    }
+  }
+
+  if (totalReplacements === 0) {
+    warn('Не найдено строк для замены. Возможно, перевод уже применён или бандл изменился.');
+    return false;
+  }
+
+  // Создаём marker
+  fs.writeFileSync(path.join(resourcesDir, PATCH_MARKER), JSON.stringify({
+    version: VERSION, patchedAt: new Date().toISOString(), method: 'in-place-string-replace',
   }));
 
-  log('✓ Перевод подготовлен в безопасном хранилище.');
-  log('  Ни один рабочий файл Hermes не был изменён.');
-  log('  Перевод применится автоматически при следующем запуске через ярлык «Hermes RU».');
+  log(`✓ Локализация применена (${totalReplacements} замен в ${files.length} файлах)!`);
   return true;
 }
 
 function restoreLoc(resourcesDir) {
-  // Ничего не делаем с app.asar.unpacked/dist напрямую.
-  // Удаляем staging и pending — launcher увидит отсутствие перевода и не применит его.
-  // Пользователю нужно переустановить Hermes для восстановления оригинального dist.
-  const dataDir = getPersistentDataDir();
-  const persDist = path.join(dataDir, 'dist');
-  const pendingPath = path.join(dataDir, 'pending-stage.json');
+  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
+  if (!fs.existsSync(unpackedDir)) {
+    err('app.asar.unpacked не найден.');
+    return false;
+  }
+  const destDist = path.join(unpackedDir, 'dist');
+  const assetsDir = path.join(destDist, 'assets');
+  if (!fs.existsSync(assetsDir)) return false;
 
-  if (fs.existsSync(persDist)) rm(persDist);
-  if (fs.existsSync(pendingPath)) rm(pendingPath);
+  // Обратная замена: RU → EN
+  const translationsPath = path.join(__dirname, '..', 'config', 'translations-map.json');
+  if (!fs.existsSync(translationsPath)) return false;
+  const translations = JSON.parse(fs.readFileSync(translationsPath, 'utf8'));
 
-  // Удаляем marker
-  const marker = path.join(resourcesDir, PATCH_MARKER);
-  if (fs.existsSync(marker)) rm(marker);
+  const files = fs.readdirSync(assetsDir).filter(f => /^index-.*\.(js|css)$/.test(f));
+  let totalReplacements = 0;
 
-  log('✓ Перевод удалён из хранилища.');
-  log('  Для полного восстановления английского интерфейса:');
-  log('  1. Удалите ярлык «Hermes RU»');
-  log('  2. Переустановите Hermes (установка поверх сохранит данные)');
+  for (const file of files) {
+    const filePath = path.join(assetsDir, file);
+    let content = fs.readFileSync(filePath, 'utf8');
+    let fileReplacements = 0;
+
+    for (const [en, ru] of Object.entries(translations)) {
+      const escapedRu = ru.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`"${escapedRu}"`, 'g');
+      const matches = content.match(pattern);
+      if (matches) {
+        content = content.replace(pattern, `"${en.replace(/"/g, '\\"').replace(/\$/g, '$$$$')}"`);
+        fileReplacements += matches.length;
+      }
+    }
+
+    if (fileReplacements > 0) {
+      const tmpPath = filePath + '.tmp';
+      fs.writeFileSync(tmpPath, content, 'utf8');
+      fs.renameSync(tmpPath, filePath);
+      totalReplacements += fileReplacements;
+    }
+  }
+
+  rm(path.join(resourcesDir, PATCH_MARKER));
+  if (totalReplacements > 0) {
+    log(`✓ Английский восстановлен (${totalReplacements} обратных замен).`);
+  } else {
+    log('✓ Marker удалён. Если остался русский — переустановите Hermes.');
+  }
   return true;
 }
 
@@ -143,10 +226,15 @@ function getPersistentDataDir() {
 
 function stageToPersistent(resourcesDir) {
   const dataDir = getPersistentDataDir();
-  const distSource = path.join(__dirname, '..', 'dist');
   log('Копирую перевод в персистентное хранилище...');
-  if (fs.existsSync(path.join(dataDir, 'dist'))) rm(path.join(dataDir, 'dist'));
-  recursiveCopy(distSource, path.join(dataDir, 'dist'));
+
+  // Копируем translations-map.json (для launcher in-place)
+  const mapSource = path.join(__dirname, '..', 'config', 'translations-map.json');
+  if (fs.existsSync(mapSource)) {
+    fs.copyFileSync(mapSource, path.join(dataDir, 'translations-map.json'));
+    log('✓ Карта переводов скопирована');
+  }
+
   fs.writeFileSync(path.join(dataDir, 'version.json'), JSON.stringify({
     hermesRuVersion: VERSION,
     stagedAt: new Date().toISOString(),

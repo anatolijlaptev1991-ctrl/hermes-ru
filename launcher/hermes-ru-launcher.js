@@ -121,43 +121,59 @@ function copyDirSync(src, dest) {
 function needsPatch(resourcesDir) {
   const unpackedDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
   if (!fs.existsSync(unpackedDist)) return true;
-  try {
-    const assetsDir = path.join(unpackedDist, 'assets');
-    if (!fs.existsSync(assetsDir)) return true;
-    const jsFiles = fs.readdirSync(assetsDir).filter(f => /^index-.*\.js$/.test(f));
-    if (jsFiles.length === 0) return true;
-    const content = fs.readFileSync(path.join(assetsDir, jsFiles[0]), 'utf8');
-    return !content.includes('Русский');
-  } catch (e) {
-    return true;
-  }
+  const markerPath = path.join(resourcesDir, '.hermes-ru-patched');
+  return !fs.existsSync(markerPath);
 }
 
-function applyTranslation(resourcesDir, distSourceDir, version) {
-  const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
-  if (!fs.existsSync(unpackedDir)) {
-    log('⚠ app.asar.unpacked не найден — невозможно применить перевод.');
+function applyTranslationInPlace(resourcesDir) {
+  const dataDir = DATA_DIR;
+  const translationsPath = path.join(dataDir, 'translations-map.json');
+  if (!fs.existsSync(translationsPath)) {
+    log('⚠ translations-map.json не найден. Запустите hermes-ru install.');
     return false;
   }
-  const destDist = path.join(unpackedDir, 'dist');
-  const stagingDist = path.join(unpackedDir, 'dist.ru.launcher');
-  log(`Применяем перевод версии ${version}...`);
-  // Копируем в staging, потом атомарно rename
-  if (fs.existsSync(stagingDist)) fs.rmSync(stagingDist, { recursive: true, force: true });
-  copyDirSync(distSourceDir, stagingDist);
-  if (fs.existsSync(destDist)) fs.rmSync(destDist, { recursive: true, force: true });
-  try { fs.renameSync(stagingDist, destDist); }
-  catch (e) {
-    // Fallback: копируем напрямую
-    copyDirSync(distSourceDir, destDist);
-    if (fs.existsSync(stagingDist)) fs.rmSync(stagingDist, { recursive: true, force: true });
+  const translations = JSON.parse(fs.readFileSync(translationsPath, 'utf8'));
+
+  const assetsDir = path.join(resourcesDir, 'app.asar.unpacked', 'dist', 'assets');
+  if (!fs.existsSync(assetsDir)) {
+    log('⚠ app.asar.unpacked/dist/assets не найден.');
+    return false;
   }
-  fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
-    version, patchedAt: new Date().toISOString(), method: 'app.asar.unpacked/dist',
-  }));
-  log('✓ Перевод применён!');
-  return true;
+
+  const files = fs.readdirSync(assetsDir).filter(f => /^index-.*\.(js|css)$/.test(f));
+  let total = 0;
+
+  for (const file of files) {
+    const filePath = path.join(assetsDir, file);
+    let content = fs.readFileSync(filePath, 'utf8');
+    let count = 0;
+    for (const [en, ru] of Object.entries(translations)) {
+      const escapedEn = en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const patterns = [new RegExp(`"${escapedEn}"`, 'g'), new RegExp(`'${escapedEn}'`, 'g')];
+      const escapedRu = ru.replace(/\$/g, '$$$$').replace(/"/g, '\\"');
+      for (const pattern of patterns) {
+        const m = content.match(pattern);
+        if (m) { content = content.replace(pattern, `"${escapedRu}"`); count += m.length; }
+      }
+    }
+    if (count > 0) {
+      const tmp = filePath + '.tmp';
+      fs.writeFileSync(tmp, content, 'utf8');
+      fs.renameSync(tmp, filePath);
+      total += count;
+    }
+  }
+
+  if (total > 0) {
+    fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
+      version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'in-place',
+    }));
+    log(`✓ Перевод восстановлен (${total} замен).`);
+    return true;
+  }
+  return false;
 }
+
 
 async function checkAndUpdate(resourcesDir) {
   const currentVersion = getInstalledVersion();
@@ -234,47 +250,6 @@ async function checkAndUpdate(resourcesDir) {
   log(`✓ Обновлено до версии ${latestVersion}!`);
 }
 
-// Применяет staging-перевод из персистентного хранилища перед запуском Hermes
-function applyPendingStage(resourcesDir) {
-  const pendingPath = path.join(DATA_DIR, 'pending-stage.json');
-  const persDist = path.join(DATA_DIR, 'dist');
-
-  // Если есть pending — применяем
-  if (fs.existsSync(pendingPath) && fs.existsSync(persDist)) {
-    const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
-    log(`Применяем перевод v${pending.version} (staging)...`);
-
-    const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked');
-    if (!fs.existsSync(unpackedDir)) {
-      log('⚠ app.asar.unpacked не найден — не могу применить перевод.');
-      return false;
-    }
-    const destDist = path.join(unpackedDir, 'dist');
-    const stagingDir = path.join(unpackedDir, 'dist.ru.swap');
-
-    // Атомарная замена: copy → rename
-    if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true, force: true });
-    copyDirSync(persDist, stagingDir);
-
-    if (fs.existsSync(destDist)) fs.rmSync(destDist, { recursive: true, force: true });
-    try { fs.renameSync(stagingDir, destDist); }
-    catch (e) {
-      // Fallback: copy напрямую
-      log('rename не удался, копирую напрямую...');
-      copyDirSync(persDist, destDist);
-      if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true, force: true });
-    }
-
-    fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
-      version: pending.version, patchedAt: new Date().toISOString(), method: 'app.asar.unpacked/dist',
-    }));
-    fs.unlinkSync(pendingPath);
-    log('✓ Перевод применён!');
-    return true;
-  }
-
-  return false;
-}
 
 function launchHermes(resourcesDir) {
   let hermesExe = fs.existsSync(HERMES_EXE_PATH_FILE)
@@ -300,9 +275,6 @@ function launchHermes(resourcesDir) {
     process.exit(1);
   }
 
-  // 0. Применяем staging-перевод (если install был запущен из Hermes)
-  applyPendingStage(resourcesDir);
-
   // 1. Проверка обновления с GitHub (быстрая, таймаут 10 сек)
   try {
     await checkAndUpdate(resourcesDir);
@@ -310,16 +282,10 @@ function launchHermes(resourcesDir) {
     log(`Проверка обновления не удалась (${e.message}). Продолжаем.`);
   }
 
-  // 2. Проверка целостности перевода
+  // 2. Проверка целостности перевода (in-place)
   if (needsPatch(resourcesDir)) {
-    log('Перевод отсутствует или слетел — восстанавливаю...');
-    const persistentDist = path.join(DATA_DIR, 'dist');
-    if (fs.existsSync(persistentDist)) {
-      const v = getInstalledVersion();
-      applyTranslation(resourcesDir, persistentDist, v);
-    } else {
-      log('⚠ Персистентное хранилище пусто. Запустите hermes-ru install.');
-    }
+    log('Перевод отсутствует или слетел — применяю in-place...');
+    applyTranslationInPlace(resourcesDir);
   }
 
   // 3. Запуск Hermes
