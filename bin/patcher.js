@@ -102,7 +102,9 @@ function launchHermes(resourcesDir) {
 // Build делает launcher перед запуском Hermes — когда он закрыт.
 // Это позволяет запускать install из чата Hermes без его закрытия.
 function patchLoc(resourcesDir, distSourceDir) {
-  const desktopDir = path.join(resourcesDir, '..', '..'); // apps/desktop
+  // resourcesDir = apps/desktop/release/win-unpacked/resources
+  // desktopDir должен быть apps/desktop → 3 уровня вверх
+  const desktopDir = path.resolve(resourcesDir, '..', '..', '..');
   const srcDir = path.join(desktopDir, 'src', 'i18n');
 
   if (!fs.existsSync(srcDir)) {
@@ -187,7 +189,7 @@ function patchLoc(resourcesDir, distSourceDir) {
 }
 
 function restoreLoc(resourcesDir) {
-  const desktopDir = path.join(resourcesDir, '..', '..');
+  const desktopDir = path.resolve(resourcesDir, '..', '..', '..');
   const srcDir = path.join(desktopDir, 'src', 'i18n');
   if (!fs.existsSync(srcDir)) return false;
 

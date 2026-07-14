@@ -138,7 +138,7 @@ function applyTranslationInPlace(resourcesDir) {
   // 1. Если есть pending-build — запускаем npm run build (Hermes ещё не запущен)
   if (fs.existsSync(pendingPath)) {
     const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
-    const desktopDir = pending.desktopDir || path.join(resourcesDir, '..', '..');
+    const desktopDir = pending.desktopDir || path.join(resourcesDir, '..', '..', '..');
 
     log(`Найден pending-build (v${pending.version}). Запускаю npm run build...`);
     try {
@@ -201,7 +201,7 @@ function applyTranslationInPlace(resourcesDir) {
       }
 
       // Build
-      const desktopDir = path.join(resourcesDir, '..', '..');
+      const desktopDir = path.join(resourcesDir, '..', '..', '..');
       try {
         const { execSync } = require('child_process');
         execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
