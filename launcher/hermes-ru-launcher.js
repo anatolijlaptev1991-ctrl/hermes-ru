@@ -122,7 +122,7 @@ function needsPatch(resourcesDir) {
   const markerPath = path.join(resourcesDir, '.hermes-ru-patched');
   if (!fs.existsSync(markerPath)) return true;
   // Проверяем наличие ru в types.ts (если Hermes обновился — слетит)
-  const typesPath = path.join(resourcesDir, '..', '..', 'src', 'i18n', 'types.ts');
+  const typesPath = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n', 'types.ts');
   if (fs.existsSync(typesPath)) {
     const c = fs.readFileSync(typesPath, 'utf8');
     return !c.includes("'ru'");
@@ -166,7 +166,7 @@ function applyTranslationInPlace(resourcesDir) {
   }
 
   // 2. Self-healing: если marker пропал (Hermes обновился) — перепатчиваем
-  const typesPath = path.join(resourcesDir, '..', '..', 'src', 'i18n', 'types.ts');
+  const typesPath = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n', 'types.ts');
   if (fs.existsSync(typesPath)) {
     const tc = fs.readFileSync(typesPath, 'utf8');
     if (!tc.includes("'ru'")) {
@@ -176,7 +176,7 @@ function applyTranslationInPlace(resourcesDir) {
         log('⚠ ru.ts не найден в хранилище. Запустите hermes-ru install.');
         return false;
       }
-      const srcDir = path.join(resourcesDir, '..', '..', 'src', 'i18n');
+      const srcDir = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n');
       fs.copyFileSync(ruSource, path.join(srcDir, 'ru.ts'));
 
       // Патчим types/catalog/languages (теми же заменами что patchLoc)
