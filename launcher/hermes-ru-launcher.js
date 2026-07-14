@@ -140,13 +140,20 @@ function applyTranslation(resourcesDir, distSourceDir, version) {
     return false;
   }
   const destDist = path.join(unpackedDir, 'dist');
+  const stagingDist = path.join(unpackedDir, 'dist.ru.launcher');
   log(`Применяем перевод версии ${version}...`);
+  // Копируем в staging, потом атомарно rename
+  if (fs.existsSync(stagingDist)) fs.rmSync(stagingDist, { recursive: true, force: true });
+  copyDirSync(distSourceDir, stagingDist);
   if (fs.existsSync(destDist)) fs.rmSync(destDist, { recursive: true, force: true });
-  copyDirSync(distSourceDir, destDist);
+  try { fs.renameSync(stagingDist, destDist); }
+  catch (e) {
+    // Fallback: копируем напрямую
+    copyDirSync(distSourceDir, destDist);
+    if (fs.existsSync(stagingDist)) fs.rmSync(stagingDist, { recursive: true, force: true });
+  }
   fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
-    version,
-    patchedAt: new Date().toISOString(),
-    method: 'app.asar.unpacked/dist',
+    version, patchedAt: new Date().toISOString(), method: 'app.asar.unpacked/dist',
   }));
   log('✓ Перевод применён!');
   return true;
@@ -227,6 +234,44 @@ async function checkAndUpdate(resourcesDir) {
   log(`✓ Обновлено до версии ${latestVersion}!`);
 }
 
+// Применяет staging-перевод, если install был запущен из работающего Hermes
+function applyPendingStage(resourcesDir) {
+  const pendingPath = path.join(DATA_DIR, 'pending-stage.json');
+  if (!fs.existsSync(pendingPath)) return false;
+
+  const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
+  const stagingDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist.ru.staged');
+  const destDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
+
+  if (!fs.existsSync(stagingDist)) {
+    // Staging пуст — удаляем pending и проверяем персистентное хранилище
+    fs.unlinkSync(pendingPath);
+    return false;
+  }
+
+  log(`Применяем staging-перевод (v${pending.version})...`);
+  const backupDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist.ru.bak');
+  if (fs.existsSync(backupDist)) fs.rmSync(backupDist, { recursive: true, force: true });
+  if (fs.existsSync(destDist)) {
+    try { fs.renameSync(destDist, backupDist); }
+    catch { fs.rmSync(destDist, { recursive: true, force: true }); }
+  }
+  try { fs.renameSync(stagingDist, destDist); }
+  catch (e) {
+    log(`⚠ Не удалось применить staging: ${e.message}`);
+    if (fs.existsSync(backupDist)) { try { fs.renameSync(backupDist, destDist); } catch {} }
+    return false;
+  }
+  if (fs.existsSync(backupDist)) fs.rmSync(backupDist, { recursive: true, force: true });
+
+  fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
+    version: pending.version, patchedAt: new Date().toISOString(), method: 'app.asar.unpacked/dist',
+  }));
+  fs.unlinkSync(pendingPath);
+  log('✓ Staging-перевод применён!');
+  return true;
+}
+
 function launchHermes(resourcesDir) {
   let hermesExe = fs.existsSync(HERMES_EXE_PATH_FILE)
     ? fs.readFileSync(HERMES_EXE_PATH_FILE, 'utf8').trim()
@@ -250,6 +295,9 @@ function launchHermes(resourcesDir) {
     log('⚠ Hermes Desktop не найден. Запуск невозможен.');
     process.exit(1);
   }
+
+  // 0. Применяем staging-перевод (если install был запущен из Hermes)
+  applyPendingStage(resourcesDir);
 
   // 1. Проверка обновления с GitHub (быстрая, таймаут 10 сек)
   try {

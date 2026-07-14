@@ -6,6 +6,7 @@ const { commandInstall, commandUninstall, commandStatus, commandRepair } = requi
 const command = process.argv[2];
 const flags = process.argv.slice(3);
 const restart = flags.includes('--restart') || flags.includes('-r');
+const force = flags.includes('--force') || flags.includes('-f');
 
 const HELP = `
 hermes-ru — Русская локализация Hermes Agent Desktop
