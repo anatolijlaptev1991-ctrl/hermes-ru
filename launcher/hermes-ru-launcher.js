@@ -146,6 +146,16 @@ function applyTranslationInPlace(resourcesDir) {
       execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
       log('✓ Build завершён.');
 
+      // КРИТИЧНО: копируем собранный dist/ в runtime (app.asar.unpacked/dist/)
+      const builtDist = path.join(desktopDir, 'dist');
+      const runtimeDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
+      if (fs.existsSync(builtDist) && fs.existsSync(path.join(resourcesDir, 'app.asar.unpacked'))) {
+        log('Копирую dist/ в runtime...');
+        if (fs.existsSync(runtimeDist)) fs.rmSync(runtimeDist, { recursive: true, force: true });
+        copyDirSync(builtDist, runtimeDist);
+        log('✓ dist/ скопирован в app.asar.unpacked.');
+      }
+
       // Создаём marker (или удаляем если uninstall)
       if (pending.version === 'uninstall') {
         const marker = path.join(resourcesDir, '.hermes-ru-patched');
@@ -200,11 +210,18 @@ function applyTranslationInPlace(resourcesDir) {
         fs.writeFileSync(langPath, lc, 'utf8');
       }
 
-      // Build
+      // Build + copy
       const desktopDir = path.join(resourcesDir, '..', '..', '..');
       try {
         const { execSync } = require('child_process');
         execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
+        // Копируем dist/ в runtime
+        const builtDist = path.join(desktopDir, 'dist');
+        const runtimeDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
+        if (fs.existsSync(builtDist) && fs.existsSync(path.join(resourcesDir, 'app.asar.unpacked'))) {
+          if (fs.existsSync(runtimeDist)) fs.rmSync(runtimeDist, { recursive: true, force: true });
+          copyDirSync(builtDist, runtimeDist);
+        }
         fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
           version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
         }));
@@ -325,12 +342,17 @@ function launchHermes(resourcesDir) {
     log(`Проверка обновления не удалась (${e.message}). Продолжаем.`);
   }
 
-  // 2. Проверка целостности перевода (in-place)
-  if (needsPatch(resourcesDir)) {
-    log('Перевод отсутствует или слетел — применяю in-place...');
+  // 2. Проверка pending-build (приоритет — install создал флаг)
+  const pendingBuildPath = path.join(DATA_DIR, 'pending-build.json');
+  if (fs.existsSync(pendingBuildPath)) {
+    log('Найден pending-build — выполняю сборку...');
+    applyTranslationInPlace(resourcesDir);
+  } else if (needsPatch(resourcesDir)) {
+    // 3. Self-healing: перевод слетел (Hermes обновился)
+    log('Перевод слетел — применяю...');
     applyTranslationInPlace(resourcesDir);
   }
 
-  // 3. Запуск Hermes
+  // 4. Запуск Hermes
   launchHermes(resourcesDir);
 })();
