@@ -157,7 +157,7 @@ function applyTranslationInPlace(resourcesDir) {
     if (!fs.existsSync(path.join(desktopDir, 'node_modules'))) {
       log('⚠ node_modules не найден в apps/desktop. Установите зависимости Hermes:');
       log('  cd ' + desktopDir + ' && npm install');
-      fs.unlinkSync(pendingPath);
+      return false;
       return false;
     }
     log('Запускаю npm run build (может занять несколько минут)...');
@@ -209,15 +209,17 @@ function applyTranslationInPlace(resourcesDir) {
 
   // 2. Self-healing: если needsPatch=true (marker пропал ИЛИ файлы повреждены)
   const typesPath = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n', 'types.ts');
+  let needsRu = false; // Объявляем снаружи блока для marker recovery
   if (fs.existsSync(typesPath)) {
     // Self-heal нужен если ЛЮБОЙ из патчей слетел (types, catalog, ru.ts)
     const srcDir = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n');
     const catalogPath = path.join(srcDir, 'catalog.ts');
     const ruTsPath = path.join(srcDir, 'ru.ts');
     const tc = fs.readFileSync(typesPath, 'utf8');
-    const needsRu = !tc.includes("'ru'") ||
+    needsRu = !tc.includes("'ru'") ||
       !fs.existsSync(ruTsPath) ||
-      (fs.existsSync(catalogPath) && !/from\s*'\.\/ru'/.test(fs.readFileSync(catalogPath, 'utf8')));
+      (fs.existsSync(catalogPath) && !/from\s*'\.\/ru'/.test(fs.readFileSync(catalogPath, 'utf8'))) ||
+      (fs.existsSync(catalogPath) && !/,\s*ru[\r\n]/.test(fs.readFileSync(catalogPath, 'utf8')));
     if (needsRu) {
       log('Перевод слетел (Hermes обновился?) — перепатчиваю...');
       const ruSource = path.join(dataDir, 'ru.ts');
@@ -384,6 +386,11 @@ async function checkAndUpdate(resourcesDir) {
 
   // Чистим
   fs.rmSync(tmpExtract, { recursive: true, force: true });
+  // Записываем версию только после успешного обновления
+  fs.writeFileSync(VERSION_FILE, JSON.stringify({
+    hermesRuVersion: latestVersion,
+    stagedAt: new Date().toISOString(),
+  }));
   log(`✓ Обновлено до версии ${latestVersion}!`);
 }
 

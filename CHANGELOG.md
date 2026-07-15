@@ -20,6 +20,19 @@
 - pending-build перед GitHub API
 - Убрана неиспользуемая extractedDist
 
+## v0.19.7–0.19.10 (2026-07-15)
+
+Раунды 3–6 аудита (15 багов):
+- Self-heal CRLF regex + marker only when build not needed
+- setConfigLanguage: [\w-]+ для zh-hant + quoted values
+- Catalog partial-patch recovery (раздельные import/TRANSLATIONS)
+- Pending-build dist copy return false
+- Auto-update: no pending without ru.ts
+- needsRu scope fix (let вместо const)
+- needsPatch: проверка catalog registration
+- Auto-update: version write after successful build
+- Preflight: не удаляет pending при отсутствии node_modules
+
 ## v0.19.0 (2026-07-15)
 
 **Полный аудит и очистка** (8 аудиторов, 4 верификатора):
