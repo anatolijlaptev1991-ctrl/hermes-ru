@@ -113,7 +113,11 @@ export const ru = defineLocale({
       signInFailed: 'Вход не удался',
       signInToRemoteGateway: 'Войти в удалённый шлюз',
       signInWithProvider: provider => `Войти через ${provider}`,
-      identityProvider: 'ваш провайдер авторизации'
+      identityProvider: 'ваш провайдер авторизации',
+      back: 'Назад',
+      gatewaySettings: 'Настройки шлюза',
+      remoteFailureHint: 'Проверьте URL шлюза и выполните вход в разделе «Настройки шлюза» либо переключитесь на локальный шлюз.',
+      signOutAndSignIn: 'Выйти и войти снова'
     }
   },
 
@@ -196,7 +200,9 @@ export const ru = defineLocale({
     unmuteHaptics: 'Включить тактильную отдачу',
     openSettings: 'Открыть настройки',
     openStarmap: 'Открыть граф памяти',
-    openKeybinds: 'Горячие клавиши'
+    openKeybinds: 'Горячие клавиши',
+    layoutEditor: 'Редактор макета',
+    layoutEditorTitle: 'Редактор макета — ⌘-клик сбрасывает макет'
   },
 
   keybinds: {
@@ -289,6 +295,9 @@ export const ru = defineLocale({
       'composer.slash': 'Палитра слэш-команд',
       'composer.help': 'Быстрая справка',
       'composer.history': 'Перебор всплывающих / история',
+      'session.newTab': 'Новая вкладка сессии',
+      'view.closeTab': 'Закрыть вкладку',
+      'view.reopenTab': 'Повторно открыть закрытую вкладку',
       'composer.cancel': 'Закрыть всплывающее · отменить запуск'
     }
   },
@@ -322,7 +331,8 @@ export const ru = defineLocale({
       mcp: 'MCP',
       archivedChats: 'Архив чатов',
       about: 'О приложении',
-      notifications: 'Уведомления'
+      notifications: 'Уведомления',
+      plugins: 'Плагины'
     },
     notifications: {
       title: 'Уведомления',
@@ -409,6 +419,8 @@ export const ru = defineLocale({
       productDesc: 'Понятные действия инструментов с краткими сводками.',
       technical: 'Технический',
       technicalDesc: 'Включает сырые аргументы/результаты инструментов и низкоуровневые детали.',
+      backdropTitle: 'Фон чата',
+      backdropDesc: 'Едва заметное изображение статуи на заднем плане чата.',
       themeTitle: 'Тема',
       themeDesc: 'Только десктопные палитры. Выбранный режим применяется поверх.',
       themeProfileNote: profile => `Сохранено для профиля ${profile} — каждый профиль хранит свою тему.`,
@@ -670,6 +682,19 @@ export const ru = defineLocale({
           'При обновлении из приложения (без терминала): сохранить локальные правки исходника (stash) или отбросить (reset). Через терминал всегда спрашивает.'
       }
     }),
+    plugins: {
+      blurb: 'Плагины расширяют интерфейс Hermes Desktop новыми панелями и командами.',
+      count: n => `Установлено: ${n}`,
+      disable: 'Отключить',
+      empty: 'Плагины десктопа пока не установлены.',
+      enable: 'Включить',
+      failed: 'ошибка',
+      kinds: { bundled: 'встроенный', disk: 'на диске', runtime: 'время выполнения' },
+      openFolder: 'Открыть папку плагинов',
+      rescan: 'Пересканировать',
+      reveal: 'Показать в файловом менеджере',
+      title: 'Плагины десктопа'
+    },
     about: {
       heading: 'Hermes Desktop',
       version: value => `Версия ${value}`,
@@ -919,6 +944,9 @@ export const ru = defineLocale({
       change: 'Изменить',
       autoUseMain: 'авто · основная модель',
       providerDefault: '(по умолчанию провайдера)',
+      fallbackAdd: 'Добавить резервную модель',
+      fallbackEmpty: 'Нет резервных моделей — используется модель по умолчанию, пока она не завершится с ошибкой.',
+      notInCatalog: 'отсутствует в списке моделей этого провайдера — запросы могут быть перенаправлены на резервную модель.',
       tasks: {
         vision: { label: 'Зрение', hint: 'Анализ изображений' },
         web_extract: { label: 'Извлечение веб', hint: 'Суммаризация страниц' },
@@ -1035,7 +1063,7 @@ export const ru = defineLocale({
     searchToolsets: 'Поиск инструментов...',
     refresh: 'Обновить навыки',
     refreshing: 'Обновление навыков',
-    loading: 'Загрузка возможностей...',
+    loading: 'Загрузка…',
     noSkillsTitle: 'Навыки не найдены',
     noSkillsDesc: 'Попробуйте более широкий поиск или другую категорию.',
     noToolsetsTitle: 'Наборы инструментов не найдены',
@@ -1167,15 +1195,15 @@ export const ru = defineLocale({
     done: 'Готово',
     streaming: 'Стриминг',
     files: 'Файлы',
-    moreFiles: count => `+ ещё ${count} файл(ов)`,
+    moreFiles: count => `+ ещё ${count} ${ruPlural(count, 'файл', 'файла', 'файлов')}`,
     delegation: index => `Делегирование ${index}`,
-    workers: count => `${count} воркер(ов)`,
-    workersActive: count => `${count} активн(ых)`,
-    agentsCount: count => `${count} агент${ruPlural(count, '', 'а', 'ов')}`,
-    activeCount: count => `${count} активн(ых)`,
-    failedCount: count => `${count} с ошибкой`,
-    toolsCount: count => `${count} инструментов`,
-    filesCount: count => `${count} файлов`,
+    workers: count => `${count} ${ruPlural(count, 'воркер', 'воркера', 'воркеров')}`,
+    workersActive: count => `${count} ${ruPlural(count, 'активен', 'активно', 'активно')}`,
+    agentsCount: count => `${count} ${ruPlural(count, 'агент', 'агента', 'агентов')}`,
+    activeCount: count => `${count} ${ruPlural(count, 'активен', 'активно', 'активно')}`,
+    failedCount: count => `${count} ${ruPlural(count, 'с ошибкой', 'с ошибкой', 'с ошибками')}`,
+    toolsCount: count => `${count} ${ruPlural(count, 'инструмент', 'инструмента', 'инструментов')}`,
+    filesCount: count => `${count} ${ruPlural(count, 'файл', 'файла', 'файлов')}`,
     updatedAgo: age => `обновлено ${age}`,
     ageNow: 'сейчас',
     ageSeconds: seconds => `${seconds}с назад`,
@@ -1198,6 +1226,7 @@ export const ru = defineLocale({
     commandCenter: 'Командный центр',
     appearance: 'Внешний вид',
     settings: 'Настройки',
+    commands: 'Команды',
     changeTheme: 'Сменить тему',
     changeColorMode: 'Сменить цветовой режим…',
     pets: {
@@ -1255,7 +1284,7 @@ export const ru = defineLocale({
       install: 'Установить',
       installing: 'Установка...',
       installed: 'Установлено',
-      installs: count => `${count} установок`
+      installs: count => `${count} ${ruPlural(count, 'установка', 'установки', 'установок')}`
     },
     settingsFields: 'Поля настроек',
     mcpServers: 'MCP-серверы',
@@ -1270,7 +1299,7 @@ export const ru = defineLocale({
     nav: {
       newChat: { title: 'Новая сессия', detail: 'Начать новую сессию' },
       settings: { title: 'Настройки', detail: 'Настроить десктоп Hermes' },
-      skills: { title: 'Возможности', detail: 'Навыки, инструменты и MCP-серверы' },
+      skills: { title: 'Навыки и инструменты', detail: 'Навыки, инструменты и MCP-серверы' },
       messaging: { title: 'Мессенджеры', detail: 'Настроить Telegram, Slack, Discord и др.' },
       artifacts: { title: 'Артефакты', detail: 'Просмотр сгенерированных результатов' }
     },
@@ -1319,7 +1348,7 @@ export const ru = defineLocale({
     noModelUsage: 'Нет использования моделей.',
     topSkills: 'Топ навыков',
     noSkillActivity: 'Нет активности навыков.',
-    actions: count => `${count} действий`,
+    actions: count => `${count} ${ruPlural(count, 'действие', 'действия', 'действий')}`,
     logFile: 'Файл лога',
     logLevel: 'Уровень',
     logSearchPlaceholder: 'Фильтр строк лога...',
@@ -1475,7 +1504,7 @@ export const ru = defineLocale({
         label: 'Разрешённые ID пользователей',
         help: 'Рекомендуется. ID пользователей Mattermost через запятую.'
       },
-      MATRIX_HOMESERVER: { label: 'URL homeserver', placeholder: 'https://matrix.org' },
+      MATRIX_HOMESERVER: { label: 'URL домашнего сервера', placeholder: 'https://matrix.org' },
       MATRIX_ACCESS_TOKEN: { label: 'Токен доступа' },
       MATRIX_USER_ID: { label: 'ID пользователя-бота', placeholder: '@hermes:example.org' },
       MATRIX_ALLOWED_USERS: {
@@ -1600,7 +1629,7 @@ export const ru = defineLocale({
       telegram: 'Telegram',
       discord: 'Discord',
       slack: 'Slack',
-      email: 'Email'
+      email: 'Эл. почта'
     },
     scheduleLabels: {
       daily: 'Ежедневно',
@@ -1687,6 +1716,9 @@ export const ru = defineLocale({
     customPlaceholder: '0 9 * * * или weekdays at 9am',
     customHint: 'Cron-выражение или фразы вроде «every hour» или «weekdays at 9am».',
     optional: 'Необязательно',
+    promptRequired: 'Необходимо указать промпт.',
+    scheduleRequired: 'Необходимо указать расписание.',
+    scriptOnlyEditHint: 'Задача только со скриптом (без промпта ИИ). ID задачи:',
     promptScheduleRequired: 'Промпт и расписание обязательны.',
     saveChanges: 'Сохранить изменения',
     createAction: 'Создать cron'
@@ -1730,7 +1762,7 @@ export const ru = defineLocale({
   sidebar: {
     nav: {
       'new-session': 'Новая сессия',
-      skills: 'Возможности',
+      skills: 'Навыки',
       messaging: 'Мессенджеры',
       artifacts: 'Артефакты'
     },
@@ -1843,7 +1875,17 @@ export const ru = defineLocale({
       ageNow: 'сейчас',
       ageDay: 'д',
       ageHour: 'ч',
-      ageMin: 'м'
+      ageMin: 'м',
+      finishedUnread: 'Завершено — не прочитано',
+      hideTabBar: 'Скрыть панель вкладок',
+      openInNewTab: 'Открыть в новой вкладке',
+      openInSplit: 'Открыть в разделённом представлении',
+      untitledChat: id => `Чат ${id}`
+    },
+    projects: {
+      baseBranchNone: 'Ветки не найдены',
+      baseBranchPlaceholder: 'Поиск веток…',
+      branchOff: () => ({ after: '', before: 'создать ветку от ' })
     }
   },
 
@@ -1980,7 +2022,7 @@ export const ru = defineLocale({
 
   statusStack: {
     agents: 'Агенты',
-    background: count => `${count} фоновых`,
+    background: count => `${count} ${ruPlural(count, 'фоновая', 'фоновые', 'фоновых')}`,
     subagents: count => `${count} суб-агент${ruPlural(count, '', 'а', 'ов')}`,
     todos: (done, total) => `Задачи ${done}/${total}`,
     running: 'Выполняется',
@@ -2030,7 +2072,7 @@ export const ru = defineLocale({
       branchOffFrom: base => `Новая ветвь от ${base}`,
       switchTo: branch => `Перейти к ${branch}`,
       switchFailed: branch => `Не удалось переключиться на ${branch}`,
-      worktrees: 'Worktrees'
+      worktrees: 'Рабочие деревья'
     }
   },
 
@@ -2122,7 +2164,7 @@ export const ru = defineLocale({
     error: 'Ошибка',
     hideOutput: 'Скрыть вывод установщика',
     showOutput: 'Показать вывод установщика',
-    lines: count => `${count} строк`,
+    lines: count => `${count} ${ruPlural(count, 'строка', 'строки', 'строк')}`,
     noOutput: 'Пока нет вывода.',
     cancelling: 'Отмена...',
     cancelInstall: 'Отменить установку',
@@ -2255,7 +2297,19 @@ export const ru = defineLocale({
       high: 'Высокое',
       max: 'Макс',
       updateFailed: 'Не удалось обновить опцию модели',
-      fastFailed: 'Не удалось обновить быстрый режим'
+      fastFailed: 'Не удалось обновить быстрый режим',
+      ultra: 'Ультра',
+      xhigh: 'Очень высокий'
+    },
+    approvalMode: {
+      ariaLabel: mode => `Режим подтверждения: ${mode}`,
+      manual: 'Ручной',
+      manualDescription: 'Запрашивать подтверждение перед действиями, требующими его',
+      off: 'Отключён',
+      offDescription: 'Выполнять без запросов на подтверждение',
+      smart: 'Умный',
+      smartDescription: 'Автоматически оценивать действия и запрашивать подтверждение при необходимости',
+      title: 'Режим подтверждения'
     },
     gatewayMenu: {
       gateway: 'Шлюз',
@@ -2419,7 +2473,7 @@ export const ru = defineLocale({
       copyFailed: 'Не удалось скопировать вывод консоли',
       copyEntry: 'Копировать запись',
       sendEntry: 'Отправить запись в чат',
-      messages: count => `${count} сообщений консоли`,
+      messages: count => `${count} ${ruPlural(count, 'сообщение', 'сообщения', 'сообщений')} консоли`,
       resize: 'Изменить размер консоли предпросмотра',
       title: 'Консоль предпросмотра',
       selected: count => `${count} выбрано`,
@@ -2531,7 +2585,8 @@ export const ru = defineLocale({
       other: 'Другое (введите ответ)',
       placeholder: 'Введите ответ…',
       skip: 'Пропустить',
-      continueLabel: 'Продолжить'
+      continueLabel: 'Продолжить',
+      skipped: 'Пропущено'
     },
     tool: {
       code: 'Код',
@@ -2710,6 +2765,51 @@ export const ru = defineLocale({
     boundaryDesc: 'Представление столкнулось с неожиданной ошибкой. Ваши чаты и настройки в безопасности.',
     reloadWindow: 'Перезагрузить окно',
     openLogs: 'Открыть логи'
+  },
+
+  zones: {
+    closeAll: 'Закрыть все',
+    closeOthers: 'Закрыть остальные',
+    closeRunningConfirm: 'Закрыть вкладку',
+    closeRunningTitle: 'Закрыть вкладку с запущенным процессом?',
+    closeRunningBody: 'В этой вкладке выполняется процесс. При её закрытии процесс будет остановлен.',
+    closeToRight: 'Закрыть вкладки справа',
+    custom: 'Пользовательский',
+    customZoneName: count => `Пользовательский макет (${count} ${ruPlural(count, 'зона', 'зоны', 'зон')})`,
+    deletePreset: name => `Удалить ${name}`,
+    dirDown: 'вниз',
+    dirLeft: 'влево',
+    dirRight: 'вправо',
+    dirUp: 'вверх',
+    editHint: 'Выберите макет или перетаскивайте панели между зонами. Щёлкните правой кнопкой по зоне, чтобы разделить её.',
+    editTitle: 'Макеты',
+    editorHintPost: ' меняет направление линии · перетащите через зоны, чтобы объединить · перетаскивайте общие границы для изменения размера',
+    editorHintPre: 'щёлкните, чтобы разделить · ',
+    hideHeader: 'Скрыть заголовок',
+    layoutNamePlaceholder: fallback => `Название макета (${fallback})`,
+    mergeZones: count => `Объединить ${count} ${ruPlural(count, 'зону', 'зоны', 'зон')}`,
+    minimize: 'Свернуть',
+    missingPane: paneId => `отсутствующая панель: ${paneId}`,
+    move: dir => `Переместить ${dir}`,
+    nameLayoutPlaceholder: 'Назовите этот макет…',
+    newGridLayout: 'Новый сеточный макет',
+    notExpressible: 'эта компоновка образует «вертушку» и пока не может быть выражена вложенными разделениями',
+    pluginDisabled: pluginId => `Плагин «${pluginId}» отключён`,
+    pluginDisabledBody: 'Снова включите его в «Настройки → Плагины», чтобы вернуть панель.',
+    reset: 'Сбросить',
+    restore: 'Восстановить',
+    saveApply: 'Сохранить и применить',
+    saveCurrentAs: 'Сохранить текущую компоновку как шаблон',
+    showHeader: 'Показать заголовок',
+    split: dir => `Разделить ${dir}`,
+    templateColumns: 'Столбцы',
+    templateGrid: 'Сетка',
+    templatePriority: 'Приоритет',
+    templateRows: 'Строки',
+    templates: 'Шаблоны',
+    zoneCount: count => `${count} ${ruPlural(count, 'зона', 'зоны', 'зон')}`,
+    zoneEditorTitle: 'Редактор зон',
+    zoneTag: index => `зона ${index}`
   },
 
   ui: {
