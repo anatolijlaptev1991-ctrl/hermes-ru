@@ -103,20 +103,26 @@ function patchLoc(resourcesDir) {
   // 3. Патчим catalog.ts: импорт + регистрация ru
   const catalogPath = path.join(srcDir, 'catalog.ts');
   let catalogContent = fs.readFileSync(catalogPath, 'utf8');
+  // 1. Добавляем import { ru } если нет
   if (!/import.*\{.*ru.*\}.*from.*'\.\/ru'/.test(catalogContent)) {
     catalogContent = catalogContent.replace(
       "import { ja } from './ja'",
       "import { ja } from './ja'\nimport { ru } from './ru'"
     );
+    log('✓ catalog.ts: import { ru } добавлен');
+  }
+  // 2. Регистрируем ru в TRANSLATIONS если нет
+  if (!/TRANSLATIONS.*\{[\s\S]*\bru\b[\s\S]*\}/.test(catalogContent) ||
+      !/,\s*ru[\r\n]/.test(catalogContent)) {
     catalogContent = catalogContent.replace(
       /export const TRANSLATIONS.*?\{[\s\S]*?ja,?[\r\n]\s*(?:ru[\r\n])?\}/,
       "export const TRANSLATIONS: Record<Locale, Translations> = {\n  en,\n  zh,\n  'zh-hant': zhHant,\n  ja,\n  ru\n}"
     );
-    fs.writeFileSync(catalogPath, catalogContent, 'utf8');
-    log('✓ catalog.ts: ru зарегистрирован');
+    log('✓ catalog.ts: ru зарегистрирован в TRANSLATIONS');
   } else {
-    log('  catalog.ts: ru уже импортирован');
+    log('  catalog.ts: ru уже зарегистрирован');
   }
+  fs.writeFileSync(catalogPath, catalogContent, 'utf8');
 
   // 4. Патчим languages.ts: добавляем ru в LOCALE_OPTIONS и алиасы
   const langPath = path.join(srcDir, 'languages.ts');
