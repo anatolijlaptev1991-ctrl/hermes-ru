@@ -234,7 +234,7 @@ function applyTranslationInPlace(resourcesDir) {
       let cc = fs.readFileSync(catalogPath, 'utf8');
       if (!/from\s*'\.\/ru'/.test(cc)) {
         cc = cc.replace("import { ja } from './ja'", "import { ja } from './ja'\nimport { ru } from './ru'");
-        cc = cc.replace(/(ja\n\})/, "ja,\n  ru\n}");
+        cc = cc.replace(/(ja,?[\r\n]\s*(?:ru[\r\n])?\})/, "ja,\n  ru\n}");
         fs.writeFileSync(catalogPath, cc, 'utf8');
       }
 
@@ -274,13 +274,17 @@ function applyTranslationInPlace(resourcesDir) {
       }
     }
   }
-  // Если файлы целы но marker пропал — восстанавливаем marker
+  // Если файлы целы но marker пропал — восстанавливаем только если build не нужен
   const markerPath = path.join(resourcesDir, '.hermes-ru-patched');
   if (!fs.existsSync(markerPath)) {
-    fs.writeFileSync(markerPath, JSON.stringify({
-      version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
-    }));
-    log('✓ Marker восстановлен.');
+    // marker восстанавливаем только если needsRu был false (build не запускался)
+    // Если build запускался (needsRu=true) — marker создаётся внутри build try/except
+    if (!needsRu) {
+      fs.writeFileSync(markerPath, JSON.stringify({
+        version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
+      }));
+      log('✓ Marker восстановлен.');
+    }
   }
   return true;
 }
