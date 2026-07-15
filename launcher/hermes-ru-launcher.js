@@ -432,6 +432,58 @@ async function checkAndUpdate(resourcesDir) {
   const currentVersion = getInstalledVersion();
   log(`Текущая версия: ${currentVersion}`);
 
+  // 1. Проверяем npm версию пакета
+  let npmVersion = null;
+  try {
+    npmVersion = execSync('npm view @anatolijlaptev1991/hermes-ru version', {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000,
+    }).trim();
+  } catch {}
+
+  if (npmVersion && compareVersions(npmVersion, currentVersion) > 0) {
+    log(`Найдена новая версия npm пакета: ${npmVersion} (текущая: ${currentVersion})`);
+    log('Обновляю npm пакет...');
+    try {
+      execSync('npm install -g @anatolijlaptev1991/hermes-ru@' + npmVersion, {
+        stdio: 'inherit', timeout: 120000,
+      });
+      log('✓ npm пакет обновлён до v' + npmVersion);
+      // Обновляем ru.ts в персистентном хранилище из нового пакета
+      try {
+        const npmRuPath = execSync('node -e "console.log(require.resolve(\'@anatolijlaptev1991/hermes-ru/src/i18n/ru.ts\'))"', {
+          encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10000,
+        }).trim();
+        // node require.resolve не работает с .ts — пробуем найти через require.resolve пути
+      } catch {}
+      // Ищем ru.ts через npm root -g
+      try {
+        const npmGlobalRoot = execSync('npm root -g', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        const npmRuTs = path.join(npmGlobalRoot, '@anatolijlaptev1991', 'hermes-ru', 'src', 'i18n', 'ru.ts');
+        if (fs.existsSync(npmRuTs)) {
+          fs.copyFileSync(npmRuTs, path.join(DATA_DIR, 'ru.ts'));
+          log('✓ ru.ts обновлён из нового пакета');
+        }
+        // Также обновляем launcher
+        const npmLauncher = path.join(npmGlobalRoot, '@anatolijlaptev1991', 'hermes-ru', 'launcher', 'hermes-ru-launcher.js');
+        if (fs.existsSync(npmLauncher)) {
+          fs.copyFileSync(npmLauncher, path.join(DATA_DIR, 'hermes-ru-launcher.js'));
+          log('✓ launcher обновлён из нового пакета');
+        }
+      } catch {}
+      // Создаём pending-build для применения нового перевода
+      const desktopDir = path.join(resourcesDir, '..', '..', '..');
+      fs.writeFileSync(path.join(DATA_DIR, 'pending-build.json'), JSON.stringify({
+        desktopDir, version: npmVersion, createdAt: new Date().toISOString(),
+      }));
+      // Применяем сразу (Hermes ещё не запущен)
+      applyTranslationInPlace(resourcesDir);
+    } catch (e) {
+      log('⚠ Не удалось обновить npm пакет: ' + e.message);
+    }
+    return;
+  }
+
+  // 2. Проверяем GitHub релиз (для не-npm обновлений)
   let release;
   try {
     release = await fetchJSON(GITHUB_API);
