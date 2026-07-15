@@ -3,7 +3,7 @@
 /**
  * hermes-ru-launcher.js — Self-healing launcher с автообновлением
  *
- * При запуске через ярлык «Hermes (Русский)»:
+ * При запуске через ярлык «Hermes RU»:
  * 1. Проверяет целостность перевода (app.asar.unpacked/dist)
  * 2. Сравнивает локальную версию с последним релизом на GitHub
  * 3. Если есть новая версия — скачивает, обновляет перевод, потом запускает Hermes
@@ -15,7 +15,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
 const https = require('https');
 const { spawn, execSync } = require('child_process');
 
@@ -121,11 +120,17 @@ function copyDirSync(src, dest) {
 function needsPatch(resourcesDir) {
   const markerPath = path.join(resourcesDir, '.hermes-ru-patched');
   if (!fs.existsSync(markerPath)) return true;
-  // Проверяем наличие ru в types.ts (если Hermes обновился — слетит)
-  const typesPath = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n', 'types.ts');
-  if (fs.existsSync(typesPath)) {
-    const c = fs.readFileSync(typesPath, 'utf8');
-    return !c.includes("'ru'");
+  const srcDir = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n');
+  // Проверяем 3 файла: types.ts, catalog.ts, ru.ts
+  const checks = [
+    { f: 'types.ts', re: /'ru'/ },
+    { f: 'catalog.ts', re: /from\s*'\.\/ru'/ },
+    { f: 'ru.ts', exists: true },
+  ];
+  for (const c of checks) {
+    const fp = path.join(srcDir, c.f);
+    if (!fs.existsSync(fp)) return true;
+    if (c.re && !c.re.test(fs.readFileSync(fp, 'utf8'))) return true;
   }
   return false;
 }
@@ -140,10 +145,18 @@ function applyTranslationInPlace(resourcesDir) {
     const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
     const desktopDir = pending.desktopDir || path.join(resourcesDir, '..', '..', '..');
 
-    log(`Найден pending-build (v${pending.version}). Запускаю npm run build...`);
+    log(`Найден pending-build (v${pending.version}). Проверяю окружение...`);
+    // Preflight: проверяем node_modules
+    if (!fs.existsSync(path.join(desktopDir, 'node_modules'))) {
+      log('⚠ node_modules не найден в apps/desktop. Установите зависимости Hermes:');
+      log('  cd ' + desktopDir + ' && npm install');
+      fs.unlinkSync(pendingPath);
+      return false;
+    }
+    log('Запускаю npm run build (может занять несколько минут)...');
     try {
       const { execSync } = require('child_process');
-      execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
+      execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000 });
       log('✓ Build завершён.');
 
       // КРИТИЧНО: копируем собранный dist/ в runtime (app.asar.unpacked/dist/)
@@ -170,7 +183,16 @@ function applyTranslationInPlace(resourcesDir) {
       fs.unlinkSync(pendingPath);
     } catch (e) {
       log(`⚠ Build не удался: ${e.message}`);
-      // Не удаляем pending — попробуем при следующем запуске
+      // Увеличиваем счётчик попыток
+      const attempts = (pending.attempts || 0) + 1;
+      if (attempts >= 3) {
+        log(`⚠ Превышен лимит попыток (${attempts}). Удаляю pending-build.`);
+        fs.unlinkSync(pendingPath);
+      } else {
+        pending.attempts = attempts;
+        fs.writeFileSync(pendingPath, JSON.stringify(pending));
+        log(`  Попытка ${attempts}/3. Попробуйте ещё раз через ярлык.`);
+      }
     }
     return true;
   }
@@ -212,9 +234,13 @@ function applyTranslationInPlace(resourcesDir) {
 
       // Build + copy
       const desktopDir = path.join(resourcesDir, '..', '..', '..');
+      if (!fs.existsSync(path.join(desktopDir, 'node_modules'))) {
+        log('⚠ node_modules не найден. Пропускаю self-heal.');
+        return false;
+      }
       try {
         const { execSync } = require('child_process');
-        execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'ignore'], timeout: 300000 });
+        execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000 });
         // Копируем dist/ в runtime
         const builtDist = path.join(desktopDir, 'dist');
         const runtimeDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
@@ -288,22 +314,25 @@ async function checkAndUpdate(resourcesDir) {
   }
   try { fs.unlinkSync(tmpZip); } catch {}
 
-  // Находим папку dist в распакованном
-  const newDist = fs.existsSync(path.join(tmpExtract, 'dist'))
-    ? path.join(tmpExtract, 'dist')
-    : tmpExtract;
+  // Находим ru.ts в распакованном архиве (GitHub releases содержат dist/, но нам нужен src/)
+  // или используем dist/ если есть
+  const extractedRuTs = path.join(tmpExtract, 'src', 'i18n', 'ru.ts');
+  const extractedDist = path.join(tmpExtract, 'dist');
 
-  // Обновляем персистентное хранилище
-  const persistentDist = path.join(DATA_DIR, 'dist');
-  if (fs.existsSync(persistentDist)) fs.rmSync(persistentDist, { recursive: true, force: true });
-  copyDirSync(newDist, persistentDist);
+  // Обновляем персистентное хранилище ru.ts
+  if (fs.existsSync(extractedRuTs)) {
+    const persRuTs = path.join(DATA_DIR, 'ru.ts');
+    fs.copyFileSync(extractedRuTs, persRuTs);
+    log('✓ ru.ts обновлён из релиза');
+  }
+
   fs.writeFileSync(VERSION_FILE, JSON.stringify({
     hermesRuVersion: latestVersion,
     stagedAt: new Date().toISOString(),
   }));
 
-  // Применяем перевод
-  applyTranslation(resourcesDir, persistentDist, latestVersion);
+  // Применяем перевод через in-place (копируем ru.ts в исходники + build + copy dist)
+  applyTranslationInPlace(resourcesDir);
 
   // Чистим
   fs.rmSync(tmpExtract, { recursive: true, force: true });

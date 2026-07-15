@@ -1,21 +1,40 @@
 # История изменений hermes-ru
 
-## v0.17.2 (2026-07-13)
+## v0.19.0 (2026-07-15)
 
-- **Иконка ярлыка**: логотип Hermes + RU в центре
-- **Корректное описание**: правильный npm scope, честное сравнение с альтернативами
-- **Safe patcher**: заменяет `app.asar.unpacked/dist` (не пересобирает app.asar)
-- Совместимость: Hermes 0.17.0 – 0.18.2
+**Полный аудит и очистка** (8 аудиторов, 4 верификатора):
 
-## v0.17.1 (2026-07-13)
+### Критические исправления
+- **catalog.ts regex**: исправлен — `ja,` вместо `ja` (перевод не применялся)
+- **Автообновление**: `applyTranslation()` → `applyTranslationInPlace()` (был ReferenceError)
+- **status**: теперь показывает pending-build (раньше врал «не установлено»)
+- **repair**: теперь вызывает `stageToPersistent` (launcher обновлялся)
+- **install --restart**: теперь реально запускает launcher
 
-- **Автообновление**: launcher проверяет GitHub и скачивает новую версию перевода
-- **Без принудительного перезапуска**: `install` НЕ убивает Hermes (флаг `--restart`)
-- **Ярлыки**: создаются на рабочем столе и в меню Пуск
-- Исправлен баг `asar.createPackage` на Node 24 (переход на `app.asar.unpacked/dist`)
+### Очистка пакета: 38 МБ → 260 КБ
+- Убран `dist/` (37 МБ, мёртвый груз)
+- Убран `@electron/asar` dependency (не используется)
+- Убран `config/translations-map.json` и `hardcoded-strings.json` (мёртвый код)
+- Убраны лишние `src/i18n/` файлы (оставлен только `ru.ts`)
+- Удалён мёртвый код: `recursiveCopy`, `fileHash`, `killHermes`, `isHermesRunning`, `BACKUP_NAME`, `DIST_DIR`, `crypto`
 
-## v0.17.0 (2026-07-13)
+### Улучшения
+- Имя ярлыка унифицировано: «Hermes RU» во всех файлах
+- Version sync: package.json, compat.json, package-lock.json
+- Build retry limit: 3 попытки, потом pending удаляется
+- Preflight: проверка `node_modules` перед build
+- `needsPatch`: проверяет types.ts + catalog.ts + ru.ts
+- Build output: stderr виден пользователю
+
+## v0.18.0–0.18.5 (2026-07-14)
+
+- Переход на `defineLocale+build` (нативная система i18n Hermes)
+- Staging: install НЕ делает build, launcher делает
+- Исправлены пути (3 уровня вверх)
+- `src/` добавлен в npm-пакет
+- pending-build + dist copy в launcher
+
+## v0.17.0–0.17.2 (2026-07-13)
 
 - Первый публичный релиз
-- Полный перевод интерфейса Hermes Desktop
 - Self-healing launcher, npm-пакет, GitHub Release

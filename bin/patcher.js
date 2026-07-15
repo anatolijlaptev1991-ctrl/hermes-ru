@@ -3,28 +3,15 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
 const { execSync } = require('child_process');
 
 const rm = (p) => fs.rmSync(p, { recursive: true, force: true });
 const mkdirp = (p) => fs.mkdirSync(p, { recursive: true });
-function recursiveCopy(src, dest) {
-  const st = fs.statSync(src);
-  if (st.isDirectory()) {
-    mkdirp(dest);
-    for (const e of fs.readdirSync(src)) recursiveCopy(path.join(src, e), path.join(dest, e));
-  } else {
-    mkdirp(path.dirname(dest));
-    fs.copyFileSync(src, dest);
-  }
-}
 
 const HERMES_EXE_NAME = 'Hermes.exe';
-const BACKUP_NAME = 'app.asar.orig';
 const PATCH_MARKER = '.hermes-ru-patched';
 const VERSION = require('../package.json').version;
 
-const DIST_DIR = path.join(__dirname, '..', 'dist');
 
 function log(msg) { console.log(`[hermes-ru] ${msg}`); }
 function warn(msg) { console.warn(`[hermes-ru] ⚠ ${msg}`); }
@@ -50,33 +37,8 @@ function findHermesExe(resourcesDir) {
   return fs.existsSync(exe) ? exe : null;
 }
 
-function fileHash(filePath) {
-  if (!fs.existsSync(filePath)) return null;
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
-}
 
-function isHermesRunning() {
-  // Метод 1: tasklist
-  try {
-    const out = execSync('tasklist /FI "IMAGENAME eq Hermes.exe"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-    if (/Hermes\.exe/i.test(out)) return true;
-  } catch (e) {}
-  // Метод 2: PowerShell Get-Process (надёжнее)
-  try {
-    const out = execSync('powershell -NoProfile -Command "Get-Process Hermes -ErrorAction SilentlyContinue | Select-Object -First 1 | Measure-Object | Select-Object -ExpandProperty Count"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    if (parseInt(out) > 0) return true;
-  } catch (e) {}
-  // Метод 3: wmic
-  try {
-    const out = execSync('wmic process where "name=\'Hermes.exe\'" get processid /value 2>nul', { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-    if (/ProcessId=\d+/.test(out)) return true;
-  } catch (e) {}
-  return false;
-}
 
-function killHermes() {
-  try { execSync('taskkill /F /IM Hermes.exe', { stdio: 'ignore' }); } catch (e) { /* not running */ }
-}
 
 function launchHermes(resourcesDir) {
   const launcherJs = path.join(getPersistentDataDir(), 'hermes-ru-launcher.js');
@@ -101,7 +63,7 @@ function launchHermes(resourcesDir) {
 // Основной метод: патч исходников i18n (без build!).
 // Build делает launcher перед запуском Hermes — когда он закрыт.
 // Это позволяет запускать install из чата Hermes без его закрытия.
-function patchLoc(resourcesDir, distSourceDir) {
+function patchLoc(resourcesDir) {
   // resourcesDir = apps/desktop/release/win-unpacked/resources
   // desktopDir должен быть apps/desktop → 3 уровня вверх
   const desktopDir = path.resolve(resourcesDir, '..', '..', '..');
@@ -147,7 +109,7 @@ function patchLoc(resourcesDir, distSourceDir) {
       "import { ja } from './ja'\nimport { ru } from './ru'"
     );
     catalogContent = catalogContent.replace(
-      /export const TRANSLATIONS.*?\{[\s\S]*?ja\n\}/,
+      /export const TRANSLATIONS.*?\{[\s\S]*?ja,?\n\s*(?:ru\n)?\}/,
       "export const TRANSLATIONS: Record<Locale, Translations> = {\n  en,\n  zh,\n  'zh-hant': zhHant,\n  ja,\n  ru\n}"
     );
     fs.writeFileSync(catalogPath, catalogContent, 'utf8');
@@ -351,28 +313,27 @@ async function commandInstall({ restart = false } = {}) {
   }
   log(`Найден Hermes: ${resourcesDir}`);
 
-  const distSourceDir = path.join(__dirname, '..', 'dist');
-  if (!fs.existsSync(distSourceDir)) {
-    err('dist/ не найден в пакете. Переустановите: npm i -g @anatolijlaptev1991/hermes-ru');
-    process.exit(1);
-  }
-
-  const ok = patchLoc(resourcesDir, distSourceDir);
+  const ok = patchLoc(resourcesDir);
   if (!ok) process.exit(1);
   stageToPersistent(resourcesDir);
   createWindowsLauncher(resourcesDir);
   setConfigLanguage();
 
-  console.log('\n╔════════════════════════════════════════════════╗');
-  console.log('║  ✓ Установка завершена!                        ║');
-  console.log('║                                                ║');
-  console.log('║  ПЕРЕЗАПУСТИТЕ HERMES через ярлык:              ║');
-  console.log('║    «Hermes RU» на рабочем столе                ║');
-  console.log('║    или через меню Пуск                         ║');
-  console.log('║                                                ║');
-  console.log('║  Перевод применится автоматически.             ║');
-  console.log('║  (при запуске через ярлык, а не обычный)       ║');
-  console.log('╚════════════════════════════════════════════════╝\n');
+  if (restart) {
+    log('Запуск Hermes через launcher (--restart)...');
+    launchHermes(resourcesDir);
+  } else {
+    console.log('\n╔════════════════════════════════════════════════╗');
+    console.log('║  ✓ Установка завершена!                        ║');
+    console.log('║                                                ║');
+    console.log('║  ПЕРЕЗАПУСТИТЕ HERMES через ярлык:              ║');
+    console.log('║    «Hermes RU» на рабочем столе                ║');
+    console.log('║    или через меню Пуск                         ║');
+    console.log('║                                                ║');
+    console.log('║  Перевод применится автоматически.             ║');
+    console.log('║  (при запуске через ярлык, а не обычный)       ║');
+    console.log('╚════════════════════════════════════════════════╝\n');
+  }
 }
 
 async function commandUninstall({ restart = false } = {}) {
@@ -399,6 +360,16 @@ async function commandUninstall({ restart = false } = {}) {
 async function commandStatus() {
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { console.log('Hermes Desktop не найден.'); process.exit(1); }
+
+  // Проверяем pending-build (install сделан, но build ещё не отработал)
+  const dataDir = getPersistentDataDir();
+  const pendingPath = path.join(dataDir, 'pending-build.json');
+  if (fs.existsSync(pendingPath)) {
+    console.log('Статус: ⏳ Установка подготовлена, ожидается сборка');
+    console.log('  Запустите Hermes через ярлык «Hermes RU» — перевод применится автоматически.');
+    return;
+  }
+
   const markerPath = path.join(resourcesDir, PATCH_MARKER);
   if (!fs.existsSync(markerPath)) {
     console.log('Статус: ❌ Локализация не установлена');
@@ -419,10 +390,12 @@ async function commandRepair({ restart = false } = {}) {
   log('Принудительное перепатчивание...');
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { err('Hermes Desktop не найден!'); process.exit(1); }
-  const ok = patchLoc(resourcesDir, path.join(__dirname, '..', 'dist'));
+  const ok = patchLoc(resourcesDir);
+  if (!ok) process.exit(1);
+  stageToPersistent(resourcesDir);
   if (!ok) process.exit(1);
   log('✓ Ремонт завершён!');
-  if (!restart) log('Перезапустите Hermes вручную через ярлык «Hermes (Русский)».');
+  if (!restart) log('Перезапустите Hermes вручную через ярлык «Hermes RU».');
   else launchHermes(resourcesDir);
 }
 
