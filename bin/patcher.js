@@ -292,9 +292,9 @@ function setConfigLanguage() {
     log('Язык уже установлен в config.yaml');
     return;
   }
-  if (/^\s*language:\s*\w+/m.test(content)) {
+  if (/^\s*language:\s*["']?[\w-]+["']?/m.test(content)) {
     // Заменяем существующий language: X на language: ru
-    content = content.replace(/^(\s*language:\s*)\w+/m, '$1ru');
+    content = content.replace(/^(\s*language:\s*)["']?[\w-]+["']?/m, '$1ru');
   } else if (/^display:/m.test(content)) {
     content = content.replace(/^display:\s*$/m, 'display:\n  language: ru');
   } else {
