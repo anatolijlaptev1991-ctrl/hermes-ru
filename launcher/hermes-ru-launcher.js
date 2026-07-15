@@ -174,6 +174,9 @@ function applyTranslationInPlace(resourcesDir) {
         if (fs.existsSync(runtimeDist)) fs.rmSync(runtimeDist, { recursive: true, force: true });
         copyDirSync(builtDist, runtimeDist);
         log('✓ dist/ скопирован в app.asar.unpacked.');
+      } else {
+        log('⚠ Не удалось скопировать dist — app.asar.unpacked или builtDist отсутствует.');
+        return false;
       }
 
       // Создаём marker (или удаляем если uninstall)
@@ -364,15 +367,19 @@ async function checkAndUpdate(resourcesDir) {
   // Применяем перевод: копируем новый ru.ts в исходники, запускаем build
   const srcDir = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n');
   const targetRu = path.join(srcDir, 'ru.ts');
-  if (fs.existsSync(path.join(DATA_DIR, 'ru.ts')) && fs.existsSync(srcDir)) {
+  if (fs.existsSync(extractedRuTs) && fs.existsSync(path.join(DATA_DIR, 'ru.ts')) && fs.existsSync(srcDir)) {
     fs.copyFileSync(path.join(DATA_DIR, 'ru.ts'), targetRu);
     log('✓ Новый ru.ts скопирован в исходники');
+    // Создаём pending-build для принудительной сборки
+    const desktopDir = path.join(resourcesDir, '..', '..', '..');
+    fs.writeFileSync(path.join(DATA_DIR, 'pending-build.json'), JSON.stringify({
+      desktopDir, version: latestVersion, createdAt: new Date().toISOString(),
+    }));
+  } else {
+    log('⚠ ru.ts не найден — сборка не запущена.');
+    fs.rmSync(tmpExtract, { recursive: true, force: true });
+    return;
   }
-  // Создаём pending-build для принудительной сборки
-  const desktopDir = path.join(resourcesDir, '..', '..', '..');
-  fs.writeFileSync(path.join(DATA_DIR, 'pending-build.json'), JSON.stringify({
-    desktopDir, version: latestVersion, createdAt: new Date().toISOString(),
-  }));
   applyTranslationInPlace(resourcesDir);
 
   // Чистим
