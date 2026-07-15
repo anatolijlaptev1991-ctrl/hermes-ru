@@ -13,11 +13,11 @@ hermes-ru — Русская локализация Hermes Agent Desktop
 
 Использование:
   hermes-ru install           Установить русскую локализацию
-  hermes-ru install --restart Установить И перезапустить Hermes (убьёт текущую сессию!)
+  hermes-ru install --restart Установить (перепатчит при следующем запуске через ярлык)
   hermes-ru uninstall          Восстановить оригинальный Hermes (английский)
   hermes-ru status             Показать статус локализации
   hermes-ru repair             Принудительно перепатчить (после обновления Hermes)
-  hermes-ru repair --restart   Перепатчить И перезапустить Hermes
+  hermes-ru repair --restart   Перепатчить (применится при следующем запуске через ярлык)
   hermes-ru help               Эта справка
 
 По умолчанию install/repair НЕ перезапускают Hermes — перезапустите

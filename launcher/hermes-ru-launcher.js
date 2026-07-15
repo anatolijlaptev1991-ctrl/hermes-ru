@@ -227,9 +227,45 @@ function applyTranslationInPlace(resourcesDir) {
 
       // Создаём marker (или удаляем если uninstall)
       if (pending.version === 'uninstall') {
+        // Удаляем ru из исходников (reverse patch)
+        const srcDir2 = path.join(desktopDir, 'src', 'i18n');
+        if (fs.existsSync(srcDir2)) {
+          // Удаляем ru.ts
+          const ruFile = path.join(srcDir2, 'ru.ts');
+          if (fs.existsSync(ruFile)) fs.unlinkSync(ruFile);
+          // Чистим types/catalog/languages
+          for (const f of ['types.ts', 'catalog.ts', 'languages.ts']) {
+            const fp = path.join(srcDir2, f);
+            if (fs.existsSync(fp)) {
+              let c = fs.readFileSync(fp, 'utf8');
+              c = c.replace(/\s*\|\s*'ru'/, '');
+              c = c.replace(/\nimport \{ ru \} from '\.\/ru'/, '');
+              c = c.replace(/,\n\s*ru\n}/, '\n}');
+              c = c.replace(/,\s*\{\s*id:\s*'ru'[\s\S]*?\}\s*\]/, '\n]');
+              c = c.replace(/,\n\s*ru:\s*'ru'[\s\S]*?ru_ru:\s*'ru'/, '');
+              fs.writeFileSync(fp, c, 'utf8');
+            }
+          }
+          // Пересобираем (build уже выполнен выше, dist скопирован)
+          // Но dist был собран с ru! Нужен rebuild без ru.
+          log('Пересобираю без ru (uninstall)...');
+          execSync('npm run build', { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
+          // Копируем очищенный dist
+          const builtDist2 = path.join(desktopDir, 'dist');
+          const runtimeDist2 = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
+          if (fs.existsSync(builtDist2) && fs.existsSync(runtimeDist2)) {
+            fs.rmSync(runtimeDist2, { recursive: true, force: true });
+            copyDirSync(builtDist2, runtimeDist2);
+          }
+        }
+        // Удаляем ярлыки (теперь безопасно)
+        const lnkDesktop = path.join(os.homedir(), 'Desktop', 'Hermes RU.lnk');
+        if (fs.existsSync(lnkDesktop)) fs.unlinkSync(lnkDesktop);
+        const lnkMenu = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
+        if (fs.existsSync(lnkMenu)) fs.rmSync(lnkMenu, { recursive: true, force: true });
         const marker = path.join(resourcesDir, '.hermes-ru-patched');
         if (fs.existsSync(marker)) fs.rmSync(marker, { force: true });
-        log('✓ Английский восстановлен.');
+        log('✓ Английский интерфейс восстановлен.');
       } else {
         fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
           version: pending.version, patchedAt: new Date().toISOString(), method: 'defineLocale+build',

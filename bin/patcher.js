@@ -157,52 +157,17 @@ function patchLoc(resourcesDir) {
 }
 
 function restoreLoc(resourcesDir) {
+  // НЕ патчим исходники напрямую! Только создаём pending(uninstall).
+  // Launcher выполнит обратный патч + build когда Hermes закрыт.
   const desktopDir = path.resolve(resourcesDir, '..', '..', '..');
-  const srcDir = path.join(desktopDir, 'src', 'i18n');
-  if (!fs.existsSync(srcDir)) return false;
-
-  log('Восстанавливаю оригинальные исходники i18n...');
-
-  // Удаляем ru.ts
-  const ruPath = path.join(srcDir, 'ru.ts');
-  if (fs.existsSync(ruPath)) { fs.unlinkSync(ruPath); log('✓ ru.ts удалён'); }
-
-  // Убираем ru из types.ts
-  const typesPath = path.join(srcDir, 'types.ts');
-  if (fs.existsSync(typesPath)) {
-    let c = fs.readFileSync(typesPath, 'utf8');
-    c = c.replace(/\s*\|\s*'ru'/, '');
-    fs.writeFileSync(typesPath, c, 'utf8');
-  }
-
-  // Убираем ru из catalog.ts
-  const catalogPath = path.join(srcDir, 'catalog.ts');
-  if (fs.existsSync(catalogPath)) {
-    let c = fs.readFileSync(catalogPath, 'utf8');
-    c = c.replace(/\nimport \{ ru \} from '\.\/ru'/, '');
-    c = c.replace(/,\n\s*ru\n\}/, '\n}');
-    fs.writeFileSync(catalogPath, c, 'utf8');
-  }
-
-  // Убираем ru из languages.ts
-  const langPath = path.join(srcDir, 'languages.ts');
-  if (fs.existsSync(langPath)) {
-    let c = fs.readFileSync(langPath, 'utf8');
-    c = c.replace(/,\s*\{\s*id:\s*'ru'[\s\S]*?\}\s*\]/, '\n]');
-    c = c.replace(/,\n\s*ru:\s*'ru'[\s\S]*?ru_ru:\s*'ru'/, '');
-    fs.writeFileSync(langPath, c, 'utf8');
-  }
-
-  // Флаг для launcher — нужен rebuild (обратный)
   const dataDir = getPersistentDataDir();
   fs.writeFileSync(path.join(dataDir, 'pending-build.json'), JSON.stringify({
     desktopDir,
     version: 'uninstall',
     createdAt: new Date().toISOString(),
   }));
-
   rm(path.join(resourcesDir, PATCH_MARKER));
-  log('✓ Исходники восстановлены. Build выполнится при следующем запуске.');
+  log('✓ Восстановление подготовлено. Build выполнится при следующем запуске через ярлык.');
   return true;
 }
 
@@ -359,10 +324,8 @@ async function commandUninstall({ restart = false } = {}) {
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { err('Hermes Desktop не найден!'); process.exit(1); }
   const restored = restoreLoc(resourcesDir);
-  const vbsDir = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Hermes RU');
-  if (fs.existsSync(vbsDir)) rm(vbsDir);
-  const desktopLnk = path.join(os.homedir(), 'Desktop', 'Hermes RU.lnk');
-  if (fs.existsSync(desktopLnk)) rm(desktopLnk);
+  // Ярлыки НЕ удаляем — launcher ещё нужен для reverse-build
+  // Он сам удалит их после успешного uninstall build
   const configPath = path.join(os.homedir(), '.hermes', 'config.yaml');
   if (fs.existsSync(configPath)) {
     let content = fs.readFileSync(configPath, 'utf8');
