@@ -158,8 +158,51 @@ function applyTranslationInPlace(resourcesDir) {
       log('⚠ node_modules не найден в apps/desktop. Установите зависимости Hermes:');
       log('  cd ' + desktopDir + ' && npm install');
       return false;
-      return false;
     }
+
+    // ПАТЧИМ ИСХОДНИКИ (безопасно — Hermes ещё не запущен)
+    const srcDir = path.join(desktopDir, 'src', 'i18n');
+    if (fs.existsSync(srcDir)) {
+      log('Патчу исходники i18n...');
+      // Копируем ru.ts
+      const persRu = path.join(DATA_DIR, 'ru.ts');
+      if (fs.existsSync(persRu)) {
+        fs.copyFileSync(persRu, path.join(srcDir, 'ru.ts'));
+      }
+      // types.ts
+      const typesPath = path.join(srcDir, 'types.ts');
+      if (fs.existsSync(typesPath)) {
+        let tc = fs.readFileSync(typesPath, 'utf8');
+        if (!tc.includes("'ru'")) {
+          tc = tc.replace(/export type Locale = 'en' \| 'zh' \| 'zh-hant' \| 'ja'/, "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ru'");
+          fs.writeFileSync(typesPath, tc, 'utf8');
+        }
+      }
+      // catalog.ts
+      const catPath = path.join(srcDir, 'catalog.ts');
+      if (fs.existsSync(catPath)) {
+        let cc = fs.readFileSync(catPath, 'utf8');
+        if (!/from\s*'\.\/ru'/.test(cc)) {
+          cc = cc.replace("import { ja } from './ja'", "import { ja } from './ja'\nimport { ru } from './ru'");
+        }
+        if (!/,\s*ru[\r\n]/.test(cc)) {
+          cc = cc.replace(/export const TRANSLATIONS.*?\{[\s\S]*?ja,?[\r\n]\s*(?:ru[\r\n])?\}/, "export const TRANSLATIONS: Record<Locale, Translations> = {\n  en,\n  zh,\n  'zh-hant': zhHant,\n  ja,\n  ru\n}");
+        }
+        fs.writeFileSync(catPath, cc, 'utf8');
+      }
+      // languages.ts
+      const langPath = path.join(srcDir, 'languages.ts');
+      if (fs.existsSync(langPath)) {
+        let lc = fs.readFileSync(langPath, 'utf8');
+        if (!/'ru'/.test(lc)) {
+          lc = lc.replace(/(\{[^}]*id:\s*'ja'[^}]*\})\s*\]/, "$1,\n  {\n    id: 'ru',\n    name: 'Русский',\n    englishName: 'Russian',\n    configValue: 'ru'\n  }\n]");
+          lc = lc.replace(/(ja_jp:\s*'ja')/, "$1,\n  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru'");
+          fs.writeFileSync(langPath, lc, 'utf8');
+        }
+      }
+      log('✓ Исходники пропатчены');
+    }
+
     log('Запускаю npm run build (может занять несколько минут)...');
     try {
       const { execSync } = require('child_process');

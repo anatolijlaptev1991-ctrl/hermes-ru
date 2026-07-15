@@ -322,11 +322,20 @@ async function commandInstall({ restart = false } = {}) {
   }
   log(`Найден Hermes: ${resourcesDir}`);
 
-  const ok = patchLoc(resourcesDir);
-  if (!ok) process.exit(1);
+  // НЕ патчим исходники здесь! Hermes может работать → Vite пересоберёт → краш.
+  // Только готовим файлы, launcher сделает patch + build когда Hermes закрыт.
   stageToPersistent(resourcesDir);
   createWindowsLauncher(resourcesDir);
   setConfigLanguage();
+
+  // Создаём pending-build для launcher
+  const dataDir = getPersistentDataDir();
+  const desktopDir = path.resolve(resourcesDir, '..', '..', '..');
+  fs.writeFileSync(path.join(dataDir, 'pending-build.json'), JSON.stringify({
+    desktopDir,
+    version: VERSION,
+    createdAt: new Date().toISOString(),
+  }));
 
   if (restart) {
     log('Запуск Hermes через launcher (--restart)...');
