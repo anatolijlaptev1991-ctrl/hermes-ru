@@ -161,8 +161,10 @@ function applyTranslationInPlace(resourcesDir) {
     }
 
     // ПАТЧИМ ИСХОДНИКИ (безопасно — Hermes ещё не запущен)
+    // Пропускаем если это uninstall (restoreLoc уже удалил ru)
+    const isUninstall = pending.version === 'uninstall';
     const srcDir = path.join(desktopDir, 'src', 'i18n');
-    if (fs.existsSync(srcDir)) {
+    if (!isUninstall && fs.existsSync(srcDir)) {
       log('Патчу исходники i18n...');
       // Копируем ru.ts
       const persRu = path.join(DATA_DIR, 'ru.ts');

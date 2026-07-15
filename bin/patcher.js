@@ -417,12 +417,16 @@ async function commandRepair({ restart = false } = {}) {
   log('Принудительное перепатчивание...');
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { err('Hermes Desktop не найден!'); process.exit(1); }
-  const ok = patchLoc(resourcesDir);
-  if (!ok) process.exit(1);
+  // repair тоже через pending — НЕ патчим исходники напрямую
   stageToPersistent(resourcesDir);
-  log('✓ Ремонт завершён!');
-  if (!restart) log('Перезапустите Hermes вручную через ярлык «Hermes RU».');
-  else launchHermes(resourcesDir);
+  const dataDir = getPersistentDataDir();
+  const desktopDir = path.resolve(resourcesDir, '..', '..', '..');
+  fs.writeFileSync(path.join(dataDir, 'pending-build.json'), JSON.stringify({
+    desktopDir,
+    version: VERSION,
+    createdAt: new Date().toISOString(),
+  }));
+  log('✓ Ремонт подготовлен. Запустите Hermes через ярлык «Hermes RU».');
 }
 
 module.exports = { commandInstall, commandUninstall, commandStatus, commandRepair };
