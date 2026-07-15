@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/github/license/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/anatolijlaptev1991-ctrl/hermes-ru?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru/commits)
-[![Hermes](https://img.shields.io/badge/Hermes%20Agent-v0.18.2-6366f1?style=flat-square)](https://github.com/nousresearch/hermes-agent)
+[![Hermes](https://img.shields.io/badge/Hermes%20Agent-v0.18.2+-6366f1?style=flat-square)](https://github.com/nousresearch/hermes-agent)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru)
 [![Status](https://img.shields.io/badge/status-alpha%20testing-orange?style=flat-square)](https://github.com/anatolijlaptev1991-ctrl/hermes-ru)
 [![npm](https://img.shields.io/npm/v/@anatolijlaptev1991/hermes-ru?style=flat-square&label=npm)](https://www.npmjs.com/package/@anatolijlaptev1991/hermes-ru)
@@ -55,7 +55,7 @@ hermes-ru install
 
 ### Без npm (из релиза)
 
-1. Скачайте `hermes-ru-dist-v0.17.2.zip` на странице [Releases](../../releases)
+1. Скачайте `hermes-ru-dist-v0.20.3.zip` на странице [Releases](../../releases)
 2. Распакуйте в папку
 3. Откройте терминал в папке и выполните:
 
@@ -143,11 +143,27 @@ hermes-ru/
 
 | Hermes | hermes-ru |
 |--------|-----------|
-| 0.17.0 – 0.18.2 | 0.17.1 |
+| 0.17.0 – 0.18.2+ | 0.20.3 |
 
 ## Лицензия
 
 MIT — делайте что хотите, ссылка на автора приветствуется.
+
+---
+
+## История разработки
+
+Этот пакет прошёл через множество итераций, прежде чем начать работать стабильно:
+
+1. **v0.17.0** — замена `app.asar.unpacked/dist/` целиком → ломало Hermes при обновлениях (несовместимые `electron-main.mjs`).
+2. **v0.17.5** — in-place regex замены строк в бандле → белый экран (поломка JS-синтаксиса в минифицированном коде).
+3. **v0.18.0** — переход на `defineLocale + npm run build` → патч исходников во время работы Hermes → краш Vite watcher.
+4. **v0.20.0** — **полное решение**: install/repair/uninstall только готовят файлы (`pending-build.json`), launcher делает патч + build когда Hermes **закрыт**.
+5. **7 раундов аудита** — 65 багов найдено, 54 исправлено (4 независимых аудитора × 7 итераций).
+
+Пакет сократился с **38 МБ до 271 КБ** (на 99.3%).
+
+---
 
 ## Поддержать проект
 
