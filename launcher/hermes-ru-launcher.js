@@ -261,6 +261,9 @@ function applyTranslationInPlace(resourcesDir) {
         if (fs.existsSync(builtDist) && fs.existsSync(path.join(resourcesDir, 'app.asar.unpacked'))) {
           if (fs.existsSync(runtimeDist)) fs.rmSync(runtimeDist, { recursive: true, force: true });
           copyDirSync(builtDist, runtimeDist);
+        } else {
+          log('⚠ Не удалось скопировать dist в runtime — app.asar.unpacked или builtDist отсутствует.');
+          return false;
         }
         fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
           version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
@@ -348,7 +351,18 @@ async function checkAndUpdate(resourcesDir) {
     log('⚠ В архиве нет src/i18n/ru.ts — перевод не обновлён.');
   }
 
-  // Применяем перевод через in-place (копируем ru.ts в исходники + build + copy dist)
+  // Применяем перевод: копируем новый ru.ts в исходники, запускаем build
+  const srcDir = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n');
+  const targetRu = path.join(srcDir, 'ru.ts');
+  if (fs.existsSync(path.join(DATA_DIR, 'ru.ts')) && fs.existsSync(srcDir)) {
+    fs.copyFileSync(path.join(DATA_DIR, 'ru.ts'), targetRu);
+    log('✓ Новый ru.ts скопирован в исходники');
+  }
+  // Создаём pending-build для принудительной сборки
+  const desktopDir = path.join(resourcesDir, '..', '..', '..');
+  fs.writeFileSync(path.join(DATA_DIR, 'pending-build.json'), JSON.stringify({
+    desktopDir, version: latestVersion, createdAt: new Date().toISOString(),
+  }));
   applyTranslationInPlace(resourcesDir);
 
   // Чистим

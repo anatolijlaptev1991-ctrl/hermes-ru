@@ -109,7 +109,7 @@ function patchLoc(resourcesDir) {
       "import { ja } from './ja'\nimport { ru } from './ru'"
     );
     catalogContent = catalogContent.replace(
-      /export const TRANSLATIONS.*?\{[\s\S]*?ja,?\n\s*(?:ru\n)?\}/,
+      /export const TRANSLATIONS.*?\\{[\\s\\S]*?ja,?[\\r\\n]\\s*(?:ru[\\r\\n])?\\}/,
       "export const TRANSLATIONS: Record<Locale, Translations> = {\n  en,\n  zh,\n  'zh-hant': zhHant,\n  ja,\n  ru\n}"
     );
     fs.writeFileSync(catalogPath, catalogContent, 'utf8');
@@ -376,7 +376,9 @@ async function commandStatus() {
     console.log('Запустите: hermes-ru install');
     return;
   }
-  const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  let marker;
+  try { marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')); }
+  catch { console.log('Статус: ⚠ Файл метки повреждён. Запустите hermes-ru repair.'); return; }
   console.log('╔══════════════════════════════════════════╗');
   console.log(`║  hermes-ru ${marker.version}`);
   console.log('╠══════════════════════════════════════════╣');
