@@ -1,5 +1,25 @@
 # История изменений hermes-ru
 
+## v0.19.2 (2026-07-15)
+
+Раунд 3 аудита (6 багов):
+- catalog.ts regex CRLF-tolerant
+- Автообновление: копирует ru.ts + создаёт pending-build
+- Self-heal: восстанавливает пропавший marker
+- dist copy: проверка app.asar.unpacked
+- commandStatus: marker try/catch
+- package-lock: убран asar
+
+## v0.19.1 (2026-07-15)
+
+Раунд 2 аудита (6 багов):
+- Self-heal проверяет 3 файла (types+catalog+ru.ts)
+- pending-build.json try/catch
+- Build output видим (inherit)
+- Автообновление: версия только при наличии ru.ts
+- pending-build перед GitHub API
+- Убрана неиспользуемая extractedDist
+
 ## v0.19.0 (2026-07-15)
 
 **Полный аудит и очистка** (8 аудиторов, 4 верификатора):

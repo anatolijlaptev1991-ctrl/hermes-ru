@@ -274,10 +274,16 @@ function applyTranslationInPlace(resourcesDir) {
       }
     }
   }
+  // Если файлы целы но marker пропал — восстанавливаем marker
+  const markerPath = path.join(resourcesDir, '.hermes-ru-patched');
+  if (!fs.existsSync(markerPath)) {
+    fs.writeFileSync(markerPath, JSON.stringify({
+      version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
+    }));
+    log('✓ Marker восстановлен.');
+  }
   return true;
 }
-
-
 async function checkAndUpdate(resourcesDir) {
   const currentVersion = getInstalledVersion();
   log(`Текущая версия: ${currentVersion}`);

@@ -105,11 +105,7 @@ function patchLoc(resourcesDir) {
   let catalogContent = fs.readFileSync(catalogPath, 'utf8');
   if (!/import.*\{.*ru.*\}.*from.*'\.\/ru'/.test(catalogContent)) {
     catalogContent = catalogContent.replace(
-      "import { ja } from './ja'",
-      "import { ja } from './ja'\nimport { ru } from './ru'"
-    );
-    catalogContent = catalogContent.replace(
-      /export const TRANSLATIONS.*?\\{[\\s\\S]*?ja,?[\\r\\n]\\s*(?:ru[\\r\\n])?\\}/,
+      /export const TRANSLATIONS.*?\{[\s\S]*?ja,?[\r\n]\s*(?:ru[\r\n])?\}/,
       "export const TRANSLATIONS: Record<Locale, Translations> = {\n  en,\n  zh,\n  'zh-hant': zhHant,\n  ja,\n  ru\n}"
     );
     fs.writeFileSync(catalogPath, catalogContent, 'utf8');
