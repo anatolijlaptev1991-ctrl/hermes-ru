@@ -247,7 +247,7 @@ export const ru = defineLocale({
       'session.slot.9': 'Перейти к недавней сессии 9',
       'session.focusSearch': 'Поиск сессий',
       'session.togglePin': 'Закрепить / открепить текущую сессию',
-      'workspace.newWorktree': 'Новый рабочий дерево',
+      'workspace.newWorktree': 'Новое рабочее дерево',
       'composer.focus': 'Фокус на компоновщик',
       'composer.modelPicker': 'Открыть выбор модели',
       'composer.voice': 'Начать / остановить голосовой разговор',
@@ -263,7 +263,7 @@ export const ru = defineLocale({
       'view.terminalSelection': 'Отправить выделение из терминала в компоновщик',
       'view.closePreviewTab': 'Закрыть вкладку предпросмотра',
       'view.flipPanes': 'Поменять стороны панелей',
-      'appearance.toggleMode': 'Переключить светлая / тёмная',
+      'appearance.toggleMode': 'Переключить светлый / тёмный режим',
       'profile.default': 'Перейти к профилю по умолчанию',
       'profile.switch.1': 'Перейти к профилю 1',
       'profile.switch.2': 'Перейти к профилю 2',
@@ -402,7 +402,7 @@ export const ru = defineLocale({
       colorMode: 'Цветовой режим',
       colorModeDesc: 'Выберите фиксированный режим или позвольте Hermes следовать настройке системы.',
       toolViewTitle: 'Отображение вызова инструментов',
-      toolViewDesc: '«Продукт» скрывает сырые payloads инструментов; «Технический» показывает полный ввод/вывод.',
+      toolViewDesc: '«Продукт» скрывает необработанные данные вызовов инструментов; «Технический» показывает полный ввод и вывод.',
       uiScaleTitle: 'Масштаб интерфейса',
       uiScaleDesc: (percent: number) =>
         `Масштабирует текст и элементы управления во всём приложении. Cmd/Ctrl с +, - и 0 также работает. Сейчас: ${percent}%.`,
@@ -489,7 +489,7 @@ export const ru = defineLocale({
         imageInputMode: 'Изображения-вложения',
         apiMaxRetries: 'Повторов API',
         serviceTier: 'Уровень обслуживания',
-        toolUseEnforcement: 'Принуждение к инструментам'
+        toolUseEnforcement: 'Обязательное использование инструментов'
       },
       terminal: {
         cwd: 'Рабочий каталог',
@@ -629,7 +629,7 @@ export const ru = defineLocale({
     fieldDescriptions: defineFieldCopy({
       model: 'Используется для новых диалогов, если не выбрать другую модель в компоновщике.',
       modelContextLength: 'Оставьте 0, чтобы использовать окно контекста выбранной модели.',
-      fallbackProviders: 'Записи provider:model для резервной копии при сбое основной модели.',
+      fallbackProviders: 'Записи provider:model для резервной модели при сбое основной.',
       display: {
         personality: 'Стиль ассистента по умолчанию для новых сессий.',
         showReasoning: 'Показывать блок рассуждений, когда бэкенд их предоставляет.'
@@ -829,7 +829,7 @@ export const ru = defineLocale({
       existingToken: value => `Существующий токен ${value}`,
       savedToken: 'сохранён',
       pasteSessionToken: 'Вставить сессионный токен',
-      testRemote: 'Тест удалённого',
+      testRemote: 'Проверить удалённый шлюз',
       saveForRestart: 'Сохранить для следующего перезапуска',
       saveAndReconnect: 'Сохранить и переподключиться',
       diagnostics: 'Диагностика',
@@ -1969,7 +1969,7 @@ export const ru = defineLocale({
     emptyTurn: 'Пустой шаг',
     attachments: count => `${count} вложени${ruPlural(count, 'е', 'я', 'й')}`,
     editingInComposer: 'Редактирование в компоновщике',
-    editingQueuedInComposer: 'Редактирование ход из очереди в компоновщике',
+    editingQueuedInComposer: 'Редактирование сообщения из очереди',
     queueEdit: 'Изменить',
     queueSendNext: 'Следующий',
     queueSend: 'Отправить',
@@ -2058,7 +2058,7 @@ export const ru = defineLocale({
       scopeBranch: 'Ветвь',
       scopeLastTurn: 'Последний шаг',
       commit: 'Коммит',
-      commitAndPush: 'Коммит и Push',
+      commitAndPush: 'Зафиксировать и отправить',
       commitPlaceholder: 'Сообщение (⌘↵ для коммита)',
       generateCommitMessage: 'Сгенерировать сообщение коммита',
       stopGenerating: 'Остановить генерацию',
@@ -2106,7 +2106,7 @@ export const ru = defineLocale({
     availableBodyBackend: 'Новая версия подключённого бэкенда Hermes готова к установке.',
     availableBodyNoChangelog: 'Новая версия готова. Примечания к выпуску недоступны для этого типа установки.',
     updateNow: 'Обновить сейчас',
-    maybeLater: 'Может быть позже',
+    maybeLater: 'Напомнить позже',
     moreChanges: count => `+ ещё ${count} изменени${ruPlural(count, 'е', 'я', 'й')}.`,
     manualTitle: 'Обновление из терминала',
     manualBody: 'Вы установили Hermes из командной строки, поэтому обновления тоже запускаются там. Вставьте это в терминал:',
@@ -2283,7 +2283,7 @@ export const ru = defineLocale({
       editModels: 'Изменить модели…',
       refreshModels: 'Обновить модели',
       fast: 'Быстро',
-      medium: 'Сред'
+      medium: 'Средний'
     },
     modelOptions: {
       noOptions: 'Для этой модели нет опций',
@@ -2762,7 +2762,7 @@ export const ru = defineLocale({
   errors: {
     genericFailure: 'Что-то пошло не так',
     boundaryTitle: 'Что-то сломалось в интерфейсе',
-    boundaryDesc: 'Представление столкнулось с неожиданной ошибкой. Ваши чаты и настройки в безопасности.',
+    boundaryDesc: 'В представлении возникла ошибка. Ваши чаты и настройки не затронуты.',
     reloadWindow: 'Перезагрузить окно',
     openLogs: 'Открыть логи'
   },
@@ -2817,10 +2817,10 @@ export const ru = defineLocale({
       clear: 'Очистить поиск'
     },
     pagination: {
-      label: 'пагинация',
-      previous: 'Пред',
+      label: 'Навигация по страницам',
+      previous: 'Назад',
       previousAria: 'Перейти к предыдущей странице',
-      next: 'След',
+      next: 'Далее',
       nextAria: 'Перейти к следующей странице'
     },
     sidebar: {
