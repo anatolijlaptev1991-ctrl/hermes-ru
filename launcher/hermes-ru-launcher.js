@@ -286,6 +286,24 @@ function applyTranslationInPlace(resourcesDir) {
           version: pending.version, patchedAt: new Date().toISOString(), method: 'defineLocale+build',
         }));
         log('✓ Русская локализация применена.');
+        // Устанавливаем язык ru в config.yaml
+        try {
+          const configPath = path.join(os.homedir(), '.hermes', 'config.yaml');
+          if (fs.existsSync(configPath)) {
+            let content = fs.readFileSync(configPath, 'utf8');
+            if (/^\s*language:\s*["']?[\w-]+["']?/m.test(content)) {
+              content = content.replace(/^(\s*language:\s*)["']?[\w-]+["']?/m, '$1ru');
+            } else if (/^display:/m.test(content)) {
+              content = content.replace(/^display:\s*$/m, 'display:\n  language: ru');
+            } else {
+              content += '\ndisplay:\n  language: ru\n';
+            }
+            fs.writeFileSync(configPath, content, 'utf8');
+            log('✓ Язык ru установлен в config.yaml');
+          }
+        } catch (e) {
+          log('⚠ Не удалось установить язык в config.yaml: ' + e.message);
+        }
       }
       fs.unlinkSync(pendingPath);
     } catch (e) {
@@ -377,6 +395,19 @@ function applyTranslationInPlace(resourcesDir) {
         fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
           version: getInstalledVersion(), patchedAt: new Date().toISOString(), method: 'defineLocale+build',
         }));
+        // Устанавливаем язык ru в config.yaml
+        try {
+          const cfgPath = path.join(os.homedir(), '.hermes', 'config.yaml');
+          if (fs.existsSync(cfgPath)) {
+            let c2 = fs.readFileSync(cfgPath, 'utf8');
+            if (/^\s*language:\s*["']?[\w-]+["']?/m.test(c2)) {
+              c2 = c2.replace(/^(\s*language:\s*)["']?[\w-]+["']?/m, '$1ru');
+            } else if (/^display:/m.test(c2)) {
+              c2 = c2.replace(/^display:\s*$/m, 'display:\n  language: ru');
+            } else { c2 += '\ndisplay:\n  language: ru\n'; }
+            fs.writeFileSync(cfgPath, c2, 'utf8');
+          }
+        } catch {}
         log('✓ Перевод восстановлен!');
       } catch (e) {
         log(`⚠ Build не удался: ${e.message}`);
