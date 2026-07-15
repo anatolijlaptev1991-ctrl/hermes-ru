@@ -142,7 +142,14 @@ function applyTranslationInPlace(resourcesDir) {
 
   // 1. Если есть pending-build — запускаем npm run build (Hermes ещё не запущен)
   if (fs.existsSync(pendingPath)) {
-    const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
+    let pending;
+    try {
+      pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
+    } catch {
+      log('⚠ pending-build.json повреждён. Удаляю.');
+      fs.unlinkSync(pendingPath);
+      return false;
+    }
     const desktopDir = pending.desktopDir || path.join(resourcesDir, '..', '..', '..');
 
     log(`Найден pending-build (v${pending.version}). Проверяю окружение...`);
@@ -156,7 +163,7 @@ function applyTranslationInPlace(resourcesDir) {
     log('Запускаю npm run build (может занять несколько минут)...');
     try {
       const { execSync } = require('child_process');
-      execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000 });
+      execSync('npm run build', { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
       log('✓ Build завершён.');
 
       // КРИТИЧНО: копируем собранный dist/ в runtime (app.asar.unpacked/dist/)
@@ -197,11 +204,18 @@ function applyTranslationInPlace(resourcesDir) {
     return true;
   }
 
-  // 2. Self-healing: если marker пропал (Hermes обновился) — перепатчиваем
+  // 2. Self-healing: если needsPatch=true (marker пропал ИЛИ файлы повреждены)
   const typesPath = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n', 'types.ts');
   if (fs.existsSync(typesPath)) {
+    // Self-heal нужен если ЛЮБОЙ из патчей слетел (types, catalog, ru.ts)
+    const srcDir = path.join(resourcesDir, '..', '..', '..', 'src', 'i18n');
+    const catalogPath = path.join(srcDir, 'catalog.ts');
+    const ruTsPath = path.join(srcDir, 'ru.ts');
     const tc = fs.readFileSync(typesPath, 'utf8');
-    if (!tc.includes("'ru'")) {
+    const needsRu = !tc.includes("'ru'") ||
+      !fs.existsSync(ruTsPath) ||
+      (fs.existsSync(catalogPath) && !/from\s*'\.\/ru'/.test(fs.readFileSync(catalogPath, 'utf8')));
+    if (needsRu) {
       log('Перевод слетел (Hermes обновился?) — перепатчиваю...');
       const ruSource = path.join(dataDir, 'ru.ts');
       if (!fs.existsSync(ruSource)) {
@@ -240,7 +254,7 @@ function applyTranslationInPlace(resourcesDir) {
       }
       try {
         const { execSync } = require('child_process');
-        execSync('npm run build', { cwd: desktopDir, stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000 });
+        execSync('npm run build', { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
         // Копируем dist/ в runtime
         const builtDist = path.join(desktopDir, 'dist');
         const runtimeDist = path.join(resourcesDir, 'app.asar.unpacked', 'dist');
@@ -317,7 +331,6 @@ async function checkAndUpdate(resourcesDir) {
   // Находим ru.ts в распакованном архиве (GitHub releases содержат dist/, но нам нужен src/)
   // или используем dist/ если есть
   const extractedRuTs = path.join(tmpExtract, 'src', 'i18n', 'ru.ts');
-  const extractedDist = path.join(tmpExtract, 'dist');
 
   // Обновляем персистентное хранилище ru.ts
   if (fs.existsSync(extractedRuTs)) {
@@ -326,10 +339,14 @@ async function checkAndUpdate(resourcesDir) {
     log('✓ ru.ts обновлён из релиза');
   }
 
-  fs.writeFileSync(VERSION_FILE, JSON.stringify({
-    hermesRuVersion: latestVersion,
-    stagedAt: new Date().toISOString(),
-  }));
+  if (fs.existsSync(extractedRuTs)) {
+    fs.writeFileSync(VERSION_FILE, JSON.stringify({
+      hermesRuVersion: latestVersion,
+      stagedAt: new Date().toISOString(),
+    }));
+  } else {
+    log('⚠ В архиве нет src/i18n/ru.ts — перевод не обновлён.');
+  }
 
   // Применяем перевод через in-place (копируем ru.ts в исходники + build + copy dist)
   applyTranslationInPlace(resourcesDir);
@@ -364,24 +381,23 @@ function launchHermes(resourcesDir) {
     process.exit(1);
   }
 
-  // 1. Проверка обновления с GitHub (быстрая, таймаут 10 сек)
+  // 1. Приоритет: pending-build (install создал флаг, build ждёт)
+  const pendingBuildPath = path.join(DATA_DIR, 'pending-build.json');
+  if (fs.existsSync(pendingBuildPath)) {
+    log('Найден pending-build — выполняю сборку...');
+    applyTranslationInPlace(resourcesDir);
+  } else if (needsPatch(resourcesDir)) {
+    log('Перевод слетел — применяю...');
+    applyTranslationInPlace(resourcesDir);
+  }
+
+  // 2. Проверка обновления с GitHub (после build, до запуска Hermes)
   try {
     await checkAndUpdate(resourcesDir);
   } catch (e) {
     log(`Проверка обновления не удалась (${e.message}). Продолжаем.`);
   }
 
-  // 2. Проверка pending-build (приоритет — install создал флаг)
-  const pendingBuildPath = path.join(DATA_DIR, 'pending-build.json');
-  if (fs.existsSync(pendingBuildPath)) {
-    log('Найден pending-build — выполняю сборку...');
-    applyTranslationInPlace(resourcesDir);
-  } else if (needsPatch(resourcesDir)) {
-    // 3. Self-healing: перевод слетел (Hermes обновился)
-    log('Перевод слетел — применяю...');
-    applyTranslationInPlace(resourcesDir);
-  }
-
-  // 4. Запуск Hermes
+  // 3. Запуск Hermes
   launchHermes(resourcesDir);
 })();
