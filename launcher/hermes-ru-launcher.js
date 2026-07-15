@@ -154,11 +154,26 @@ function applyTranslationInPlace(resourcesDir) {
     const desktopDir = pending.desktopDir || path.join(resourcesDir, '..', '..', '..');
 
     log(`Найден pending-build (v${pending.version}). Проверяю окружение...`);
-    // Preflight: проверяем node_modules
+    // Preflight 1: проверяем node_modules
     if (!fs.existsSync(path.join(desktopDir, 'node_modules'))) {
       log('⚠ node_modules не найден в apps/desktop. Установите зависимости Hermes:');
       log('  cd ' + desktopDir + ' && npm install');
       return false;
+    }
+    // Preflight 2: проверяем electron binary (часто не скачивается при npm install)
+    const electronDist = path.join(desktopDir, 'node_modules', 'electron', 'dist');
+    const electronExe = path.join(electronDist, 'electron.exe');
+    if (!fs.existsSync(electronExe)) {
+      log('⚠ electron.exe не найден! Скачать (213 МБ)...');
+      try {
+        const { execSync } = require('child_process');
+        execSync('node node_modules/electron/install.js', { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
+        log('✓ electron.exe скачан.');
+      } catch (e2) {
+        log('⚠ Не удалось скачать electron.exe. Выполните вручную:');
+        log('  cd ' + desktopDir + ' && node node_modules/electron/install.js');
+        return false;
+      }
     }
 
     // ПАТЧИМ ИСХОДНИКИ (безопасно — Hermes ещё не запущен)
@@ -338,6 +353,13 @@ function applyTranslationInPlace(resourcesDir) {
       if (!fs.existsSync(path.join(desktopDir, 'node_modules'))) {
         log('⚠ node_modules не найден. Пропускаю self-heal.');
         return false;
+      }
+      // Preflight: electron binary
+      const elExe = path.join(desktopDir, 'node_modules', 'electron', 'dist', 'electron.exe');
+      if (!fs.existsSync(elExe)) {
+        log('⚠ electron.exe не найден! Скачиваю...');
+        try { execSync('node node_modules/electron/install.js', { cwd: desktopDir, stdio: 'inherit', timeout: 600000 }); }
+        catch { log('⚠ Не удалось скачать electron. Выполните: node node_modules/electron/install.js'); return false; }
       }
       try {
         const { execSync } = require('child_process');
