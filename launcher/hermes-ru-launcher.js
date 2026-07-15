@@ -125,6 +125,7 @@ function needsPatch(resourcesDir) {
   const checks = [
     { f: 'types.ts', re: /'ru'/ },
     { f: 'catalog.ts', re: /from\s*'\.\/ru'/ },
+    { f: 'catalog.ts', re: /,\s*ru[\r\n]/ },
     { f: 'ru.ts', exists: true },
   ];
   for (const c of checks) {
@@ -431,12 +432,12 @@ async function checkAndUpdate(resourcesDir) {
 
   // Чистим
   fs.rmSync(tmpExtract, { recursive: true, force: true });
+  log(`✓ Обновлено до версии ${latestVersion}!`);
   // Записываем версию только после успешного обновления
   fs.writeFileSync(VERSION_FILE, JSON.stringify({
     hermesRuVersion: latestVersion,
     stagedAt: new Date().toISOString(),
   }));
-  log(`✓ Обновлено до версии ${latestVersion}!`);
 }
 
 
@@ -454,6 +455,13 @@ function launchHermes(resourcesDir) {
   log(`Запуск Hermes: ${hermesExe}`);
   const child = spawn(hermesExe, [], { detached: true, stdio: 'ignore' });
   child.unref();
+  process.exit(0);
+}
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log('hermes-ru-launcher — Self-healing launcher');
+  console.log('Запускается автоматически через ярлык «Hermes RU».');
+  console.log('Не запускайте вручную (если не для диагностики).');
   process.exit(0);
 }
 

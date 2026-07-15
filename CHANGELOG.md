@@ -20,6 +20,16 @@
 - pending-build перед GitHub API
 - Убрана неиспользуемая extractedDist
 
+## v0.20.0–v0.20.1 (2026-07-15)
+
+**Полное исправление белого экрана:**
+- `install` и `repair` больше НЕ патчат TypeScript исходники напрямую
+- Launcher делает патч + build + dist copy когда Hermes закрыт
+- `uninstall`: launcher пропускает ru patch (pending.version=uninstall)
+- needsPatch: проверяет catalog registration
+- Launcher: --help handling
+- Auto-update: version write после успешного build
+
 ## v0.19.7–0.19.10 (2026-07-15)
 
 Раунды 3–6 аудита (15 багов):
