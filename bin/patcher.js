@@ -292,7 +292,10 @@ function setConfigLanguage() {
     log('Язык уже установлен в config.yaml');
     return;
   }
-  if (/^display:/m.test(content)) {
+  if (/^\s*language:\s*\w+/m.test(content)) {
+    // Заменяем существующий language: X на language: ru
+    content = content.replace(/^(\s*language:\s*)\w+/m, '$1ru');
+  } else if (/^display:/m.test(content)) {
     content = content.replace(/^display:\s*$/m, 'display:\n  language: ru');
   } else {
     content += '\ndisplay:\n  language: ru\n';
@@ -365,8 +368,15 @@ async function commandStatus() {
   const dataDir = getPersistentDataDir();
   const pendingPath = path.join(dataDir, 'pending-build.json');
   if (fs.existsSync(pendingPath)) {
-    console.log('Статус: ⏳ Установка подготовлена, ожидается сборка');
-    console.log('  Запустите Hermes через ярлык «Hermes RU» — перевод применится автоматически.');
+    let pending;
+    try { pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8')); } catch { pending = {}; }
+    if (pending.version === 'uninstall') {
+      console.log('Статус: ⏳ Восстановление английского подготовлено, ожидается сборка');
+      console.log('  Запустите Hermes через ярлык «Hermes RU» — английский восстановится.');
+    } else {
+      console.log('Статус: ⏳ Установка подготовлена, ожидается сборка');
+      console.log('  Запустите Hermes через ярлык «Hermes RU» — перевод применится автоматически.');
+    }
     return;
   }
 
@@ -395,7 +405,6 @@ async function commandRepair({ restart = false } = {}) {
   const ok = patchLoc(resourcesDir);
   if (!ok) process.exit(1);
   stageToPersistent(resourcesDir);
-  if (!ok) process.exit(1);
   log('✓ Ремонт завершён!');
   if (!restart) log('Перезапустите Hermes вручную через ярлык «Hermes RU».');
   else launchHermes(resourcesDir);
