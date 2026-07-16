@@ -503,7 +503,8 @@ function getNpmCommand() {
 }
 
 function runDesktopBuild(desktopDir) {
-  execFileSync(getNpmCommand(), ['run', 'build'], { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
+  // execSync = shell:true, нужно для .cmd на Windows
+  execSync('npm run build', { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
 }
 
 function shouldRepairStandardShortcut(shortcutName, targetPath, argumentsText, launcherPath) {
