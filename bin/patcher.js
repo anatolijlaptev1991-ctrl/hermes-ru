@@ -17,9 +17,33 @@ function log(msg) { console.log(`[hermes-ru] ${msg}`); }
 function warn(msg) { console.warn(`[hermes-ru] ⚠ ${msg}`); }
 function err(msg) { console.error(`[hermes-ru] ✗ ${msg}`); }
 
+function getHermesHomeDir() {
+  if (process.env.HERMES_HOME) return path.resolve(process.env.HERMES_HOME);
+  const localHermes = process.env.LOCALAPPDATA
+    ? path.join(process.env.LOCALAPPDATA, 'hermes')
+    : null;
+  const legacyHermes = path.join(os.homedir(), '.hermes');
+  for (const candidate of [localHermes, legacyHermes]) {
+    if (!candidate) continue;
+    if (fs.existsSync(path.join(candidate, 'config.yaml')) ||
+        fs.existsSync(path.join(candidate, 'hermes-agent'))) return candidate;
+  }
+  return localHermes || legacyHermes;
+}
+
+function getHermesConfigPath() {
+  return path.join(getHermesHomeDir(), 'config.yaml');
+}
+
+function psSingleQuote(value) {
+  return String(value).replace(/'/g, "''");
+}
+
 function findHermesResources() {
   const home = os.homedir();
+  const hermesHome = getHermesHomeDir();
   const candidates = [
+    path.join(hermesHome, 'hermes-agent', 'apps', 'desktop', 'release', 'win-unpacked', 'resources'),
     path.join(home, 'AppData', 'Local', 'hermes', 'hermes-agent', 'apps', 'desktop', 'release', 'win-unpacked', 'resources'),
     path.join(home, 'AppData', 'Local', 'Programs', 'Hermes', 'resources'),
     path.join(home, 'AppData', 'Local', 'hermes-desktop', 'resources'),
@@ -166,7 +190,7 @@ function restoreLoc(resourcesDir) {
     version: 'uninstall',
     createdAt: new Date().toISOString(),
   }));
-  rm(path.join(resourcesDir, PATCH_MARKER));
+  // Marker и runtime удаляются только после успешного English build.
   log('✓ Восстановление подготовлено. Build выполнится при следующем запуске через ярлык.');
   return true;
 }
@@ -189,6 +213,7 @@ function stageToPersistent(resourcesDir) {
   }
 
   fs.writeFileSync(path.join(dataDir, 'version.json'), JSON.stringify({
+    version: VERSION,
     hermesRuVersion: VERSION,
     stagedAt: new Date().toISOString(),
   }));
@@ -208,14 +233,14 @@ function stageToPersistent(resourcesDir) {
 function createShortcut(lnkPath, launcherJs) {
   const nodeExe = process.execPath;
   const iconPath = path.join(getPersistentDataDir(), 'hermes-ru-icon.ico');
-  const iconLine = fs.existsSync(iconPath) ? `$sc.IconLocation = '${iconPath.replace(/\\/g, '\\\\')}'\n` : '';
-  const psPath = path.join(os.tmpdir(), 'hermes-ru-shortcut.ps1');
+  const iconLine = fs.existsSync(iconPath) ? `$sc.IconLocation = '${psSingleQuote(iconPath)}'\n` : '';
+  const psPath = path.join(os.tmpdir(), `ярлык-hermes-ru-${process.pid || 'install'}.ps1`);
   const ps = [
     '$ws = New-Object -ComObject WScript.Shell',
-    `$sc = $ws.CreateShortcut('${lnkPath.replace(/\\/g, '\\\\')}')`,
-    `$sc.TargetPath = '${nodeExe.replace(/\\/g, '\\\\')}'`,
-    `$sc.Arguments = '"${launcherJs.replace(/\\/g, '\\\\')}"'`,
-    `$sc.WorkingDirectory = '${os.homedir().replace(/\\/g, '\\\\')}'`,
+    `$sc = $ws.CreateShortcut('${psSingleQuote(lnkPath)}')`,
+    `$sc.TargetPath = '${psSingleQuote(nodeExe)}'`,
+    `$sc.Arguments = '"${psSingleQuote(launcherJs)}"'`,
+    `$sc.WorkingDirectory = '${psSingleQuote(os.homedir())}'`,
     `$sc.Description = 'Hermes Agent Desktop (Русский)'`,
     iconLine,
     '$sc.Save()',
@@ -253,26 +278,33 @@ function createWindowsLauncher(resourcesDir) {
 }
 
 function setConfigLanguage() {
-  const configPath = path.join(os.homedir(), '.hermes', 'config.yaml');
-  if (!fs.existsSync(configPath)) {
-    warn('config.yaml не найден — язык нужно выбрать вручную в настройках Hermes.');
-    return;
-  }
-  let content = fs.readFileSync(configPath, 'utf8');
-  if (/^\s*language:\s*ru\s*$/m.test(content)) {
-    log('Язык уже установлен в config.yaml');
-    return;
-  }
-  if (/^\s*language:\s*["']?[\w-]+["']?/m.test(content)) {
-    // Заменяем существующий language: X на language: ru
-    content = content.replace(/^(\s*language:\s*)["']?[\w-]+["']?/m, '$1ru');
-  } else if (/^display:/m.test(content)) {
-    content = content.replace(/^display:\s*$/m, 'display:\n  language: ru');
+  const configPath = getHermesConfigPath();
+  const content = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : '';
+  const crlf = String.fromCharCode(13, 10);
+  const lf = String.fromCharCode(10);
+  const eol = content.includes(crlf) ? crlf : lf;
+  const lines = content.replaceAll(String.fromCharCode(13), '').split(lf);
+  const displayIndex = lines.findIndex((line) => /^display:\s*(?:#.*)?$/.test(line));
+  if (displayIndex >= 0) {
+    let end = lines.length;
+    for (let i = displayIndex + 1; i < lines.length; i++) {
+      if (/^[^\s#][^:]*:\s*/.test(lines[i])) { end = i; break; }
+    }
+    const languageIndex = lines.findIndex((line, i) =>
+      i > displayIndex && i < end && /^\s+language:\s*/.test(line));
+    if (languageIndex >= 0) {
+      const indent = lines[languageIndex].match(/^\s*/)[0] || '  ';
+      lines[languageIndex] = `${indent}language: ru`;
+    } else {
+      lines.splice(displayIndex + 1, 0, '  language: ru');
+    }
   } else {
-    content += '\ndisplay:\n  language: ru\n';
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    lines.push('display:', '  language: ru', '');
   }
-  fs.writeFileSync(configPath, content, 'utf8');
-  log('✓ Язык ru установлен в config.yaml');
+  mkdirp(path.dirname(configPath));
+  fs.writeFileSync(configPath, lines.join(eol), 'utf8');
+  log(`✓ Язык ru установлен: ${configPath}`);
 }
 
 async function commandInstall({ restart = false } = {}) {
@@ -291,7 +323,7 @@ async function commandInstall({ restart = false } = {}) {
   // Только готовим файлы, launcher сделает patch + build когда Hermes закрыт.
   stageToPersistent(resourcesDir);
   createWindowsLauncher(resourcesDir);
-  setConfigLanguage();
+  // display.language меняется launcher только после успешной публикации runtime.
 
   // Создаём pending-build для launcher
   const dataDir = getPersistentDataDir();
@@ -324,16 +356,10 @@ async function commandUninstall({ restart = false } = {}) {
   const resourcesDir = findHermesResources();
   if (!resourcesDir) { err('Hermes Desktop не найден!'); process.exit(1); }
   const restored = restoreLoc(resourcesDir);
-  // Ярлыки НЕ удаляем — launcher ещё нужен для reverse-build
-  // Он сам удалит их после успешного uninstall build
-  const configPath = path.join(os.homedir(), '.hermes', 'config.yaml');
-  if (fs.existsSync(configPath)) {
-    let content = fs.readFileSync(configPath, 'utf8');
-    content = content.replace(/^\s*language:\s*ru\s*$/m, '  # language: ru (removed by hermes-ru)');
-    fs.writeFileSync(configPath, content, 'utf8');
-  }
+  // Ярлыки НЕ удаляем — launcher ещё нужен для reverse-build.
+  // Он сам изменит config.yaml, marker и ярлыки после успешного English build.
   if (restored) {
-    log('✓ Английский интерфейс восстановлен.');
+    log('✓ Восстановление подготовлено.');
     if (restart) launchHermes(resourcesDir);
   }
 }

@@ -103,7 +103,8 @@ export const ru = defineLocale({
       useLocalGateway: 'Использовать локальный шлюз',
       openLogs: 'Открыть логи',
       repairHint: 'Восстановление перезапускает установщик и может занять несколько минут на новой машине.',
-      remoteSignInHint: 'Открывает окно входа в шлюз. Используйте локальный шлюз для переключения на встроенный бэкенд.',
+      remoteSignInHint: signInLabel =>
+        `Сначала выйдите из сохранённой удалённой сессии браузера, затем откройте ${signInLabel}. Для встроенного бэкенда используйте локальный шлюз`,
       hideRecentLogs: 'Скрыть недавние логи',
       showRecentLogs: 'Показать недавние логи',
       signedInTitle: 'Вход выполнен',
@@ -125,7 +126,7 @@ export const ru = defineLocale({
     region: 'Уведомления',
     hide: 'Скрыть',
     show: 'Показать',
-    more: count => `${count} ещё ${ruPlural(count, 'уведомление', 'уведомления', 'уведомлений')}`,
+    more: count => `ещё ${count} ${ruPlural(count, 'уведомление', 'уведомления', 'уведомлений')}`,
     clearAll: 'Очистить все',
     dismiss: 'Скрыть уведомление',
     details: 'Подробности',
@@ -454,7 +455,7 @@ export const ru = defineLocale({
         installedTag: 'установлен',
         generatedTag: 'Сгенерирован',
         countCapped: (cap, total) => `Показано ${cap} из ${total} — введите для фильтрации.`,
-        count: n => `${n} питомц${ruPlural(n, 'ец', 'а', 'ев')}.`,
+        count: n => `${n} ${ruPlural(n, 'питомец', 'питомца', 'питомцев')}.`,
         uninstall: name => `Удалить ${name}`,
         delete: name => `Стереть ${name}`,
         deleteTitle: name => `Стереть ${name}?`,
@@ -537,6 +538,7 @@ export const ru = defineLocale({
       stt: {
         enabled: 'Распознавание речи',
         provider: 'Провайдер STT',
+        echoTranscripts: 'Показывать расшифровки',
         local: {
           model: 'Локальная модель транскрипции',
           language: 'Язык транскрипции'
@@ -642,7 +644,11 @@ export const ru = defineLocale({
       terminal: {
         cwd: 'Каталог проекта по умолчанию для инструментов и терминала.',
         persistentShell: 'Сохранять состояние Shell между командами (если бэкенд поддерживает).',
-        envPassthrough: 'Переменные окружения, передаваемые в выполнение инструментов.'
+        envPassthrough: 'Переменные окружения, передаваемые в выполнение инструментов.',
+        dockerImage: 'Образ контейнера для бэкенда Docker.',
+        singularityImage: 'Образ контейнера для бэкенда Singularity.',
+        modalImage: 'Образ контейнера для бэкенда Modal.',
+        daytonaImage: 'Образ контейнера для бэкенда Daytona.'
       },
       codeExecution: {
         mode: 'Насколько строго выполнение кода ограничено текущим проектом.'
@@ -673,8 +679,18 @@ export const ru = defineLocale({
       },
       stt: {
         enabled: 'Включить локальное или провайдерское распознавание речи.',
+        echoTranscripts: 'Показывать исходную расшифровку голосового сообщения в чате.',
         elevenlabs: {
           languageCode: 'Необязательный код языка ISO-639-3. Пусто = автоопределение ElevenLabs.'
+        }
+      },
+      tts: {
+        xai: {
+          voiceId: 'Идентификатор голоса xAI (например, eve) или пользовательского голоса.',
+          language: 'Код языка речи, например ru.'
+        },
+        neutts: {
+          device: 'Устройство локального выполнения NeuTTS.'
         }
       },
       updates: {
@@ -1198,10 +1214,10 @@ export const ru = defineLocale({
     moreFiles: count => `+ ещё ${count} ${ruPlural(count, 'файл', 'файла', 'файлов')}`,
     delegation: index => `Делегирование ${index}`,
     workers: count => `${count} ${ruPlural(count, 'воркер', 'воркера', 'воркеров')}`,
-    workersActive: count => `${count} ${ruPlural(count, 'активен', 'активно', 'активно')}`,
+    workersActive: count => `${count} ${ruPlural(count, 'активный', 'активных', 'активных')}`,
     agentsCount: count => `${count} ${ruPlural(count, 'агент', 'агента', 'агентов')}`,
-    activeCount: count => `${count} ${ruPlural(count, 'активен', 'активно', 'активно')}`,
-    failedCount: count => `${count} ${ruPlural(count, 'с ошибкой', 'с ошибкой', 'с ошибками')}`,
+    activeCount: count => `${count} ${ruPlural(count, 'активный', 'активных', 'активных')}`,
+    failedCount: count => `${count} ${ruPlural(count, 'с ошибкой', 'с ошибками', 'с ошибками')}`,
     toolsCount: count => `${count} ${ruPlural(count, 'инструмент', 'инструмента', 'инструментов')}`,
     filesCount: count => `${count} ${ruPlural(count, 'файл', 'файла', 'файлов')}`,
     updatedAgo: age => `обновлено ${age}`,
@@ -1284,7 +1300,7 @@ export const ru = defineLocale({
       install: 'Установить',
       installing: 'Установка...',
       installed: 'Установлено',
-      installs: count => `${count} ${ruPlural(count, 'установка', 'установки', 'установок')}`
+      installs: count => `${count} ${ruPlural(Number(count), 'установка', 'установки', 'установок')}`
     },
     settingsFields: 'Поля настроек',
     mcpServers: 'MCP-серверы',
@@ -1348,7 +1364,7 @@ export const ru = defineLocale({
     noModelUsage: 'Нет использования моделей.',
     topSkills: 'Топ навыков',
     noSkillActivity: 'Нет активности навыков.',
-    actions: count => `${count} ${ruPlural(count, 'действие', 'действия', 'действий')}`,
+    actions: count => `${count} ${ruPlural(Number(count), 'действие', 'действия', 'действий')}`,
     logFile: 'Файл лога',
     logLevel: 'Уровень',
     logSearchPlaceholder: 'Фильтр строк лога...',
@@ -1535,7 +1551,7 @@ export const ru = defineLocale({
     close: 'Закрыть профили',
     nameHint: 'Строчные буквы, цифры, дефисы и подчёркивания. Должно начинаться с буквы или цифры.',
     title: 'Профили',
-    count: count => `${count} профиль${ruPlural(count, '', 'я', 'ей')}`,
+    count: count => `${count} ${ruPlural(count, 'профиль', 'профиля', 'профилей')}`,
     search: 'Поиск профилей...',
     loading: 'Загрузка профилей...',
     newProfile: 'Новый профиль',
@@ -1844,6 +1860,9 @@ export const ru = defineLocale({
       enter: label => `Открыть ${label}`,
       reorder: label => `Переупорядочить ${label}`,
       toggle: label => `Скрыть/показать сессии ${label}`,
+      baseBranchNone: 'Ветки не найдены',
+      baseBranchPlaceholder: 'Поиск веток…',
+      branchOff: () => ({ after: '', before: 'создать ветку от ' }),
       back: 'Все проекты'
     },
     newSessionIn: label => `Новая сессия в ${label}`,
@@ -1881,11 +1900,6 @@ export const ru = defineLocale({
       openInNewTab: 'Открыть в новой вкладке',
       openInSplit: 'Открыть в разделённом представлении',
       untitledChat: id => `Чат ${id}`
-    },
-    projects: {
-      baseBranchNone: 'Ветки не найдены',
-      baseBranchPlaceholder: 'Поиск веток…',
-      branchOff: () => ({ after: '', before: 'создать ветку от ' })
     }
   },
 
@@ -2022,7 +2036,7 @@ export const ru = defineLocale({
 
   statusStack: {
     agents: 'Агенты',
-    background: count => `${count} ${ruPlural(count, 'фоновая', 'фоновые', 'фоновых')}`,
+    background: count => `${count} ${ruPlural(count, 'фоновая задача', 'фоновые задачи', 'фоновых задач')}`,
     subagents: count => `${count} суб-агент${ruPlural(count, '', 'а', 'ов')}`,
     todos: (done, total) => `Задачи ${done}/${total}`,
     running: 'Выполняется',

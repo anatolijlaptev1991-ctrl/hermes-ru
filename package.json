@@ -1,6 +1,6 @@
 {
   "name": "@anatolijlaptev1991/hermes-ru",
-  "version": "0.22.1",
+  "version": "0.22.2",
   "description": "Русская локализация Hermes Agent Desktop для Windows. defineLocale + build.",
   "license": "MIT",
   "author": "Anatolij Laptev",
@@ -9,6 +9,10 @@
     "url": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru.git"
   },
   "homepage": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru",
+  "scripts": {
+    "test": "node --test тесты/*.js",
+    "test:contracts": "node --test тесты/проверка_контрактов_локализации.js"
+  },
   "bin": {
     "hermes-ru": "bin/cli.js"
   },
