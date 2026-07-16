@@ -35,10 +35,6 @@ function getHermesConfigPath() {
   return path.join(getHermesHomeDir(), 'config.yaml');
 }
 
-function psSingleQuote(value) {
-  return String(value).replace(/'/g, "''");
-}
-
 function findHermesResources() {
   const home = os.homedir();
   const hermesHome = getHermesHomeDir();
@@ -231,29 +227,25 @@ function stageToPersistent(resourcesDir) {
 }
 
 function createShortcut(lnkPath, launcherJs) {
+  // Инлайн-PowerShell без временных файлов — избегает false-positive AV (Trojan.Win32.Generic)
+  const esc = (s) => s.replace(/'/g, "''");
   const nodeExe = process.execPath;
   const iconPath = path.join(getPersistentDataDir(), 'hermes-ru-icon.ico');
-  const iconLine = fs.existsSync(iconPath) ? `$sc.IconLocation = '${psSingleQuote(iconPath)}'\n` : '';
-  const psPath = path.join(os.tmpdir(), `ярлык-hermes-ru-${process.pid || 'install'}.ps1`);
-  const ps = [
-    '$ws = New-Object -ComObject WScript.Shell',
-    `$sc = $ws.CreateShortcut('${psSingleQuote(lnkPath)}')`,
-    `$sc.TargetPath = '${psSingleQuote(nodeExe)}'`,
-    `$sc.Arguments = '"${psSingleQuote(launcherJs)}"'`,
-    `$sc.WorkingDirectory = '${psSingleQuote(os.homedir())}'`,
-    `$sc.Description = 'Hermes Agent Desktop (Русский)'`,
-    iconLine,
-    '$sc.Save()',
-  ].join('\n') + '\n';
-  fs.writeFileSync(psPath, ps, 'utf8');
+  const cmds = [
+    `$sc=(New-Object -ComObject WScript.Shell).CreateShortcut('${esc(lnkPath)}')`,
+    `$sc.TargetPath='${esc(nodeExe)}'`,
+    `$sc.Arguments='\"${esc(launcherJs)}\"'`,
+    `$sc.WorkingDirectory='${esc(os.homedir())}'`,
+    `$sc.Description='Hermes Agent Desktop (Russian)'`,
+  ];
+  if (fs.existsSync(iconPath)) cmds.push(`$sc.IconLocation='${esc(iconPath)}'`);
+  cmds.push('$sc.Save()');
   try {
-    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psPath}"`, { stdio: 'ignore' });
+    execSync(`powershell -NoProfile -Command ${cmds.join('; ')}`, { stdio: 'ignore', timeout: 15000 });
     return true;
   } catch (e) {
     warn('Не удалось создать ярлык: ' + e.message);
     return false;
-  } finally {
-    rm(psPath);
   }
 }
 
