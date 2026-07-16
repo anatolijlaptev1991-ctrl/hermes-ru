@@ -482,51 +482,36 @@ function shouldRepairStandardShortcut(shortcutName, targetPath, argumentsText, l
   return Boolean(launcherName && args.includes(launcherName));
 }
 
-function psSingleQuote(value) {
-  return String(value).replace(/'/g, "''");
-}
-
 function inspectWindowsShortcut(shortcutPath) {
   if (!fs.existsSync(shortcutPath)) return null;
-  const scriptPath = path.join(os.tmpdir(), `проверка-ярлыка-hermes-${process.pid}-${Date.now()}.ps1`);
-  const script = [
-    '$ws = New-Object -ComObject WScript.Shell',
-    `$sc = $ws.CreateShortcut('${psSingleQuote(shortcutPath)}')`,
-    "[PSCustomObject]@{ targetPath = $sc.TargetPath; arguments = $sc.Arguments } | ConvertTo-Json -Compress",
-  ].join('\n');
-  fs.writeFileSync(scriptPath, script, 'utf8');
+  const esc = (s) => s.replace(/'/g, "''");
   try {
     const output = execFileSync('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath,
+      '-NoProfile', '-Command',
+      `$sc=(New-Object -ComObject WScript.Shell).CreateShortcut('${esc(shortcutPath)}'); [PSCustomObject]@{targetPath=$sc.TargetPath;arguments=$sc.Arguments}|ConvertTo-Json -Compress`,
     ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 });
     return JSON.parse(String(output).trim());
-  } finally {
-    try { fs.rmSync(scriptPath, { force: true }); } catch {}
+  } catch {
+    return null;
   }
 }
 
 function rewriteWindowsShortcut(shortcutPath, hermesExe) {
-  fs.mkdirSync(path.dirname(shortcutPath), { recursive: true });
-  const scriptPath = path.join(os.tmpdir(), `восстановление-ярлыка-hermes-${process.pid}-${Date.now()}.ps1`);
+  const esc = (s) => s.replace(/'/g, "''");
   const workingDir = path.dirname(hermesExe);
-  const script = [
-    '$ws = New-Object -ComObject WScript.Shell',
-    `$sc = $ws.CreateShortcut('${psSingleQuote(shortcutPath)}')`,
-    `$sc.TargetPath = '${psSingleQuote(hermesExe)}'`,
-    "$sc.Arguments = ''",
-    `$sc.WorkingDirectory = '${psSingleQuote(workingDir)}'`,
-    `$sc.IconLocation = '${psSingleQuote(hermesExe)},0'`,
-    "$sc.Description = 'Hermes Agent Desktop'",
+  fs.mkdirSync(path.dirname(shortcutPath), { recursive: true });
+  const cmds = [
+    `$sc=(New-Object -ComObject WScript.Shell).CreateShortcut('${esc(shortcutPath)}')`,
+    `$sc.TargetPath='${esc(hermesExe)}'`,
+    `$sc.Arguments=''`,
+    `$sc.WorkingDirectory='${esc(workingDir)}'`,
+    `$sc.IconLocation='${esc(hermesExe)},0'`,
+    `$sc.Description='Hermes Agent Desktop'`,
     '$sc.Save()',
-  ].join('\n');
-  fs.writeFileSync(scriptPath, script, 'utf8');
+  ];
   try {
-    execFileSync('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath,
-    ], { stdio: 'ignore', timeout: 30000 });
-  } finally {
-    try { fs.rmSync(scriptPath, { force: true }); } catch {}
-  }
+    execFileSync('powershell.exe', ['-NoProfile', '-Command', cmds.join('; ')], { stdio: 'ignore', timeout: 30000 });
+  } catch { /* ярлык не критичен */ }
 }
 
 function repairHijackedStandardShortcuts(resourcesDir, options = {}) {

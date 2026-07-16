@@ -1,5 +1,14 @@
 # История изменений hermes-ru
 
+## v0.22.4 (2026-07-16)
+
+**Инлайн-PowerShell в launcher — убирает EPERM от Касперского:**
+
+- `inspectWindowsShortcut`: инлайн `-Command` вместо temp `.ps1`.
+- `rewriteWindowsShortcut`: инлайн `-Command` вместо temp `.ps1`.
+- Убрана неиспользуемая `psSingleQuote()` из launcher.
+- Убран `-ExecutionPolicy Bypass` во всех вызовах PowerShell.
+
 ## v0.22.3 (2026-07-16)
 
 **Исправление false-positive AV (Trojan.Win32.Generic) при создании ярлыков:**
