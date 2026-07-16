@@ -1,5 +1,16 @@
 # История изменений hermes-ru
 
+## v0.22.5 (2026-07-16)
+
+**Тотальное логирование с лёгким вкл/выкл:**
+
+- Лог-файл: `~/.hermes/russian-loc/hermes-ru.log`
+- Включение: `hermes-ru log-on` или `HERMES_RU_LOG=1`
+- Отключение: `hermes-ru log-off` или `HERMES_RU_LOG=0`
+- Уровни: INFO, WARN, ERROR, DEBUG (debug — только в файл)
+- Все `log('⚠ ...')` → `warn('...')`, `log('✗ ...')` → `error('...')`
+- Debug-логи в ключевых точках (старт, pending, build, launch)
+
 ## v0.22.4 (2026-07-16)
 
 **Инлайн-PowerShell в launcher — убирает EPERM от Касперского:**

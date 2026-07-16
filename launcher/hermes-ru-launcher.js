@@ -25,8 +25,41 @@ const GITHUB_API = 'https://api.github.com/repos/anatolijlaptev1991-ctrl/hermes-
 const PENDING_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const LAUNCHER_LOCK_MAX_AGE_MS = 20 * 60 * 1000;
 const LAUNCHER_LOCK_FILE = path.join(DATA_DIR, 'launcher.lock');
+const LOG_FILE = path.join(DATA_DIR, 'hermes-ru.log');
+const LOG_ENABLED_FILE = path.join(DATA_DIR, '.log-enabled');
+let _logEnabled = null;
 
-function log(msg) { console.log(`[hermes-ru-launcher] ${msg}`); }
+function isLogEnabled() {
+  if (_logEnabled !== null) return _logEnabled;
+  if (process.env.HERMES_RU_LOG === '1') { _logEnabled = true; return true; }
+  if (process.env.HERMES_RU_LOG === '0') { _logEnabled = false; return false; }
+  _logEnabled = fs.existsSync(LOG_ENABLED_FILE);
+  return _logEnabled;
+}
+
+function logToFile(level, msg) {
+  if (!isLogEnabled()) return;
+  try {
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    fs.appendFileSync(LOG_FILE, `[${ts}] ${level} ${msg}\n`, 'utf8');
+  } catch {}
+}
+
+function log(msg) {
+  console.log(`[hermes-ru-launcher] ${msg}`);
+  logToFile('INFO', msg);
+}
+function warn(msg) {
+  console.warn(`[hermes-ru-launcher] ⚠ ${msg}`);
+  logToFile('WARN', msg);
+}
+function error(msg) {
+  console.error(`[hermes-ru-launcher] ✗ ${msg}`);
+  logToFile('ERROR', msg);
+}
+function debug(msg) {
+  logToFile('DEBUG', msg);
+}
 
 function getHermesHomeDir() {
   if (process.env.HERMES_HOME) return path.resolve(process.env.HERMES_HOME);
@@ -93,7 +126,7 @@ function isStalePending(pending) {
 
 function removePending(pendingPath, reason) {
   try { fs.unlinkSync(pendingPath); } catch {}
-  log(`⚠ pending-build удалён: ${reason}`);
+  warn(`pending-build удалён: ${reason}`);
 }
 
 function acquireLauncherLock() {
@@ -312,7 +345,7 @@ function replaceDirAtomically(sourceDir, targetDir) {
   } finally {
     if (committed) {
       try { if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true, force: true }); }
-      catch (cleanupError) { log(`⚠ Не удалось удалить резервную копию dist: ${cleanupError.message}`); }
+      catch (cleanupError) { warn(`Не удалось удалить резервную копию dist: ${cleanupError.message}`); }
     }
   }
 }
@@ -336,21 +369,21 @@ function findElectronPackageDir(desktopDir) {
 function ensureElectronBinary(desktopDir) {
   const electronDir = findElectronPackageDir(desktopDir);
   if (!electronDir) {
-    log('⚠ Пакет Electron не найден ни в apps/desktop, ни в родительских node_modules.');
+    warn('Пакет Electron не найден ни в apps/desktop, ни в родительских node_modules.');
     return false;
   }
   const electronExe = path.join(electronDir, 'dist', 'electron.exe');
   if (fs.existsSync(electronExe)) return true;
   const installer = path.join(electronDir, 'install.js');
   if (!fs.existsSync(installer)) {
-    log(`⚠ В пакете Electron отсутствует installer: ${installer}`);
+    warn(`В пакете Electron отсутствует installer: ${installer}`);
     return false;
   }
-  log(`⚠ electron.exe не найден. Запускаю installer из ${electronDir}...`);
+  warn(`electron.exe не найден. Запускаю installer из ${electronDir}...`);
   try {
     execFileSync(process.execPath, [installer], { cwd: desktopDir, stdio: 'inherit', timeout: 600000 });
   } catch (error) {
-    log(`⚠ Не удалось скачать electron.exe: ${error.message}`);
+    warn(`Не удалось скачать electron.exe: ${error.message}`);
     return false;
   }
   return fs.existsSync(electronExe);
@@ -535,7 +568,7 @@ function repairHijackedStandardShortcuts(resourcesDir, options = {}) {
       repaired += 1;
       log(`✓ Восстановлен стандартный ярлык: ${shortcutPath}`);
     } catch (error) {
-      log(`⚠ Не удалось проверить стандартный ярлык ${shortcutPath}: ${error.message}`);
+      warn(`Не удалось проверить стандартный ярлык ${shortcutPath}: ${error.message}`);
     }
   }
   return repaired;
@@ -605,7 +638,7 @@ function applyTranslationInPlace(resourcesDir) {
     try {
       validateBuildEnvironment(desktopDir, { uninstall: isUninstall });
     } catch (error) {
-      log(`⚠ Preflight сборки не пройден: ${error.message}`);
+      warn(`Preflight сборки не пройден: ${error.message}`);
       return 'failed';
     }
 
@@ -694,7 +727,7 @@ function applyTranslationInPlace(resourcesDir) {
         const marker = path.join(resourcesDir, '.hermes-ru-patched');
         if (fs.existsSync(marker)) fs.rmSync(marker, { force: true });
         try { ensureConfigLanguage('en'); }
-        catch (e) { log('⚠ Не удалось установить English в config.yaml: ' + e.message); }
+        catch (e) { warn('Не удалось установить English в config.yaml: ' + e.message); }
         log('✓ Английский интерфейс восстановлен.');
       } else {
         fs.writeFileSync(path.join(resourcesDir, '.hermes-ru-patched'), JSON.stringify({
@@ -703,13 +736,13 @@ function applyTranslationInPlace(resourcesDir) {
         log('✓ Русская локализация применена.');
         // Устанавливаем язык ru в config.yaml
         try { ensureConfigLanguage(); }
-        catch (e) { log('⚠ Не удалось установить язык в config.yaml: ' + e.message); }
+        catch (e) { warn('Не удалось установить язык в config.yaml: ' + e.message); }
       }
       fs.unlinkSync(pendingPath);
       if (hasDistBackup && fs.existsSync(distBackupPath)) fs.rmSync(distBackupPath, { recursive: true, force: true });
       return 'applied';
     } catch (e) {
-      log(`⚠ Build не удался: ${e.message}`);
+      warn(`Build не удался: ${e.message}`);
       if (!runtimeCommitted) {
         restoreSourceFiles(sourceSnapshot);
         log('✓ Исходники i18n восстановлены после сбоя.');
@@ -719,14 +752,14 @@ function applyTranslationInPlace(resourcesDir) {
           replaceDirAtomically(distBackupPath, runtimeDistForBackup);
           log('✓ Предыдущий runtime dist восстановлен после сбоя сборки.');
         } catch (restoreError) {
-          log(`✗ Не удалось восстановить runtime dist: ${restoreError.message}`);
+          error(`Не удалось восстановить runtime dist: ${restoreError.message}`);
         }
         try { fs.rmSync(distBackupPath, { recursive: true, force: true }); } catch {}
       }
       // Увеличиваем счётчик попыток
       const attempts = (pending.attempts || 0) + 1;
       if (attempts >= 3) {
-        log(`⚠ Превышен лимит попыток (${attempts}). Удаляю pending-build.`);
+        warn(`Превышен лимит попыток (${attempts}). Удаляю pending-build.`);
         fs.unlinkSync(pendingPath);
       } else {
         pending.attempts = attempts;
@@ -758,7 +791,7 @@ function applyTranslationInPlace(resourcesDir) {
   try {
     validateBuildEnvironment(desktopDir, { uninstall: false });
   } catch (error) {
-    log(`⚠ Self-heal preflight не пройден: ${error.message}`);
+    warn(`Self-heal preflight не пройден: ${error.message}`);
     return 'failed';
   }
 
@@ -826,7 +859,7 @@ function applyTranslationInPlace(resourcesDir) {
     return 'applied';
   } catch (error) {
     if (!runtimeCommitted) restoreSourceFiles(sourceSnapshot);
-    log(`⚠ Self-heal не удался: ${error.message}`);
+    warn(`Self-heal не удался: ${error.message}`);
     return 'failed';
   }
 }
@@ -879,12 +912,12 @@ async function checkAndUpdate(resourcesDir) {
       }));
       const applyResult = applyTranslationInPlace(resourcesDir);
       if (applyResult !== 'applied') {
-        log('⚠ Обновление npm не применено; сохраняю рабочий runtime.');
+        warn('Обновление npm не применено; сохраняю рабочий runtime.');
         return;
       }
       writeVersionFile(npmVersion);
     } catch (e) {
-      log('⚠ Не удалось обновить npm пакет: ' + e.message);
+      warn('Не удалось обновить npm пакет: ' + e.message);
     }
     return;
   }
@@ -951,7 +984,7 @@ async function checkAndUpdate(resourcesDir) {
   }
 
   if (!fs.existsSync(extractedRuTs)) {
-    log('⚠ В архиве нет src/i18n/ru.ts — перевод не обновлён.');
+    warn('В архиве нет src/i18n/ru.ts — перевод не обновлён.');
   }
 
   // Применяем перевод: копируем новый ru.ts в исходники, запускаем build
@@ -966,13 +999,13 @@ async function checkAndUpdate(resourcesDir) {
       desktopDir, version: latestVersion, createdAt: new Date().toISOString(),
     }));
   } else {
-    log('⚠ ru.ts не найден — сборка не запущена.');
+    warn('ru.ts не найден — сборка не запущена.');
     fs.rmSync(tmpExtract, { recursive: true, force: true });
     return;
   }
   const applyResult = applyTranslationInPlace(resourcesDir);
   if (applyResult !== 'applied') {
-    log('⚠ Обновление релиза не применено; сохраняю рабочий runtime.');
+    warn('Обновление релиза не применено; сохраняю рабочий runtime.');
     fs.rmSync(tmpExtract, { recursive: true, force: true });
     return;
   }
@@ -993,7 +1026,7 @@ function launchHermes(resourcesDir) {
     hermesExe = path.join(path.dirname(resourcesDir), 'Hermes.exe');
   }
   if (!fs.existsSync(hermesExe)) {
-    log(`⚠ Hermes.exe не найден: ${hermesExe}`);
+    warn(`Hermes.exe не найден: ${hermesExe}`);
     process.exit(1);
   }
   log(`Запуск Hermes: ${hermesExe}`);
@@ -1010,23 +1043,29 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 }
 
 (async function main() {
+  log('Запуск launcher v' + (getInstalledVersion() || 'unknown'));
+  debug(`DATA_DIR=${DATA_DIR}  PID=${process.pid}  cwd=${process.cwd()}`);
+
   const resourcesDir = findHermesResources();
   if (!resourcesDir) {
-    log('⚠ Hermes Desktop не найден. Запуск невозможен.');
+    error('Hermes Desktop не найден. Запуск невозможен.');
     process.exit(1);
   }
+  debug(`resourcesDir=${resourcesDir}`);
 
   try {
     repairHijackedStandardShortcuts(resourcesDir);
-  } catch (error) {
-    log(`⚠ Проверка стандартных ярлыков пропущена: ${error.message}`);
+  } catch (err) {
+    warn(`Проверка стандартных ярлыков пропущена: ${err.message}`);
   }
 
   const pendingBuildPath = path.join(DATA_DIR, 'pending-build.json');
   const patchRequired = fs.existsSync(pendingBuildPath) || needsPatch(resourcesDir);
+  debug(`pendingBuild=${fs.existsSync(pendingBuildPath)}  needsPatch=${needsPatch(resourcesDir)}`);
+
   if (isHermesRunning()) {
     if (patchRequired) {
-      log('✗ Hermes уже запущен. Закройте все окна Hermes и повторно откройте ярлык «Hermes RU» — сборка поверх работающего приложения запрещена.');
+      error('Hermes уже запущен. Закройте все окна Hermes и повторно откройте ярлык «Hermes RU» — сборка поверх работающего приложения запрещена.');
       process.exit(2);
     }
     log('Hermes уже запущен — второй экземпляр не создаётся.');
@@ -1050,11 +1089,10 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
     }
 
     if (startupBuildResult !== false && startupBuildResult !== 'failed') {
-      // Проверка обновления после build, до запуска Hermes.
       try {
         await checkAndUpdate(resourcesDir);
-      } catch (error) {
-        log(`Проверка обновления не удалась (${error.message}). Продолжаем.`);
+      } catch (err) {
+        warn(`Проверка обновления не удалась (${err.message}). Продолжаем.`);
       }
     }
   } finally {
@@ -1062,10 +1100,11 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   }
 
   if (startupBuildResult === false || startupBuildResult === 'failed') {
-    log('✗ Запуск остановлен: сборка локализации не завершилась. Оригинальный runtime сохранён. Исправьте зависимости и повторите hermes-ru repair.');
+    error('Запуск остановлен: сборка локализации не завершилась. Оригинальный runtime сохранён. Исправьте зависимости и повторите hermes-ru repair.');
     process.exit(1);
   }
 
-  // 3. Запуск Hermes
+  debug(`startupBuildResult=${startupBuildResult}  launching Hermes...`);
+  log('Запуск Hermes...');
   launchHermes(resourcesDir);
 })();
