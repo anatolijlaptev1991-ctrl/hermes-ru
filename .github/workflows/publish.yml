@@ -1,0 +1,204 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      npm_publish:
+        description: 'Опубликовать в npm (вместо npm publish вручную)'
+        type: boolean
+        default: false
+      bump_type:
+        description: 'Тип поднятия версии (patch/minor/major)'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+env:
+  NODE_VERSION: '20'
+  NPM_PACKAGE: '@anatolijlaptev1991/hermes-ru'
+
+jobs:
+  test:
+    name: 🧪 Тесты
+    runs-on: windows-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org/
+
+      - name: 📦 Установка зависимостей
+        run: npm ci
+
+      - name: 🧪 Запуск тестов
+        run: npm test
+
+  lint:
+    name: 🔍 Линтер / Проверка консистентности
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Установка зависимостей
+        run: npm ci
+
+      - name: 🔍 Проверка package.json
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          if ($pkg.name -ne '${{ env.NPM_PACKAGE }}') {
+            Write-Error "package.json name mismatch: $($pkg.name) != ${{ env.NPM_PACKAGE }}"
+            exit 1
+          }
+          Write-Host "✓ package.json name: $($pkg.name)"
+
+      - name: 🔍 Проверка compat.json
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $compat = Get-Content compat.json | ConvertFrom-Json
+          if ($compat.version -ne $pkg.version) {
+            Write-Error "compat.json version ($($compat.version)) != package.json ($($pkg.version))"
+            exit 1
+          }
+          Write-Host "✓ compat.json version matches package.json"
+
+      - name: 🔍 Проверка CHANGELOG.md
+        run: |
+          if (-not (Test-Path CHANGELOG.md)) {
+            Write-Error "CHANGELOG.md not found"
+            exit 1
+          }
+          $changelog = Get-Content CHANGELOG.md -Raw
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          if ($changelog -notmatch "v$($pkg.version)") {
+            Write-Warning "CHANGELOG.md не содержит запись о версии v$($pkg.version)"
+          } else {
+            Write-Host "✓ CHANGELOG.md содержит v$($pkg.version)"
+          }
+
+  publish-npm:
+    name: 📦 Публикация в npm
+    if: >
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.npm_publish == 'true')
+    needs: [test, lint]
+    runs-on: windows-latest
+    environment: npm-publish
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: ⚙️ Setup Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org/
+
+      - name: 📦 Установка зависимостей
+        run: npm ci
+
+      - name: 🏷️ Определение версии (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          BUMP="${{ github.event.inputs.bump_type }}"
+          NEW=$(node -e "
+            const [maj, min, pat] = '$CURRENT'.split('.').map(Number);
+            if ('$BUMP' === 'major') console.log([maj+1,0,0].join('.'));
+            else if ('$BUMP' === 'minor') console.log([maj,min+1,0].join('.'));
+            else console.log([maj,min,pat+1].join('.'));
+          ")
+          echo "BUMPED_VERSION=$NEW" >> $GITHUB_ENV
+          echo "Current: $CURRENT → New: $NEW"
+
+      - name: 🏷️ Обновление версии в package.json (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $pkg.version = "$env:BUMPED_VERSION"
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+
+      - name: 🏷️ Обновление compat.json
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          $compat = Get-Content compat.json | ConvertFrom-Json
+          $compat.version = "$env:BUMPED_VERSION"
+          $compat | ConvertTo-Json -Depth 10 | Set-Content compat.json
+
+      - name: 📦 npm publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🏷️ Git tag (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "anatolijlaptev1991-ctrl"
+          git config user.email "anatolij.laptev.1991@gmail.com"
+          git add package.json compat.json
+          git commit -m "chore(release): v$env:BUMPED_VERSION [CI]"
+          git tag "v$env:BUMPED_VERSION"
+          git push origin "v$env:BUMPED_VERSION"
+          git push origin master
+
+      - name: ✅ Нотификация об успехе
+        run: |
+          $VERSION = node -p "require('./package.json').version"
+          Write-Host "::notice::✅ ${{ env.NPM_PACKAGE }}@$VERSION опубликован в npm"
+
+  create-release:
+    name: 🏷️ GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [publish-npm]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 🏷️ Определить версию из тега
+        shell: bash
+        run: |
+          echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: 📦 Сборка release-артефакта
+        run: |
+          npm pack --pack-destination "$env:RUNNER_TEMP"
+          Write-Host "::notice::Артефакт собран: ${{ env.NPM_PACKAGE }}-$env:RELEASE_VERSION.tgz"
+
+      - name: 🏷️ Создание GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ env.RELEASE_VERSION }}
+          tag_name: ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+          files: |
+            ${{ runner.temp }}/*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
