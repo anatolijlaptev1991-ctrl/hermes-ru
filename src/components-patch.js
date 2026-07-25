@@ -49,6 +49,28 @@ function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Заменить JSX text-node на expression-строку (напр. '{t.settings.x.y}').
+ * Реальные файлы Hermes хранят текстовые узлы МНОГОСТРОЧНО:
+ *   >\n<indent>Text\n
+ * а не инлайн >Text<. Поддерживаем обе формы; иначе PatchAnchorError.
+ */
+function replaceJsxText(out, text, expr, file, label) {
+  const inline = `>${text}<`;
+  if (out.includes(inline)) {
+    return out.replace(inline, `>${expr}<`);
+  }
+  const re = new RegExp(`(\\n[ \\t]+)${escapeRegExp(text)}(\\r?\\n)`);
+  if (re.test(out)) {
+    return out.replace(re, (_m, ws, eol) => `${ws}${expr}${eol}`);
+  }
+  throw new PatchAnchorError(file, label);
+}
+
 // ---------------------------------------------------------------------------
 // Новые i18n-ключи для en.ts (добавляются структурно после существующих
 // settings.model.* в секцию model)
@@ -334,22 +356,18 @@ function patchModelSettingsMoA(content) {
   changed = true;
 
   // 4. 'Enabled' label → t('settings.model.moa.enabled')
-  const enabledAnchor = '>Enabled<';
+  const enabledAnchor = 'text-xs">\n              Enabled\n';
   if (!out.includes(enabledAnchor)) {
     throw new PatchAnchorError('model-settings.tsx', 'MoA Enabled label');
   }
-  out = out.replace('>Enabled<', `>{t.settings.model.moa.enabled}<`);
+  out = out.replace(
+    'text-xs">\n              Enabled\n',
+    'text-xs">\n              {t.settings.model.moa.enabled}\n'
+  );
   changed = true;
 
   // 5. 'Set default' button → t('settings.model.moa.setDefault')
-  const setDefaultAnchor = '>Set default<';
-  if (!out.includes(setDefaultAnchor)) {
-    throw new PatchAnchorError('model-settings.tsx', 'MoA Set default');
-  }
-  out = out.replace(
-    '>Set default<',
-    `>{t.settings.model.moa.setDefault}<`
-  );
+  out = replaceJsxText(out, 'Set default', '{t.settings.model.moa.setDefault}', 'model-settings.tsx', 'MoA Set default');
   changed = true;
 
   // 6. 'Delete' button (preset delete) → t('settings.model.moa.delete')
@@ -377,24 +395,18 @@ function patchModelSettingsMoA(content) {
   changed = true;
 
   // 8. 'Add preset' button → t('settings.model.moa.addPreset')
-  const addPresetAnchor = '>Add preset<';
-  if (!out.includes(addPresetAnchor)) {
-    throw new PatchAnchorError('model-settings.tsx', 'MoA Add preset button');
-  }
-  out = out.replace(
-    '>Add preset<',
-    `>{t.settings.model.moa.addPreset}<`
-  );
+  out = replaceJsxText(out, 'Add preset', '{t.settings.model.moa.addPreset}', 'model-settings.tsx', 'MoA Add preset button');
   changed = true;
 
   // 9. 'Default:' label → t('settings.model.moa.defaultLabel')
-  const defaultLabelAnchor = '>Default:<';
+  // Реальная форма: `Default: <span className="font-mono">{...}` (текст+элемент на одной строке)
+  const defaultLabelAnchor = 'Default: <span className="font-mono">';
   if (!out.includes(defaultLabelAnchor)) {
     throw new PatchAnchorError('model-settings.tsx', 'MoA Default: label');
   }
   out = out.replace(
-    '>Default:<',
-    `>{t.settings.model.moa.defaultLabel}<`
+    defaultLabelAnchor,
+    `{t.settings.model.moa.defaultLabel}{' '}<span className="font-mono">`
   );
   changed = true;
 
@@ -426,17 +438,7 @@ function patchModelSettingsMoA(content) {
   changed = true;
 
   // 12. 'Add reference model' button → t('settings.model.moa.addReference')
-  const addRefAnchor = '>Add reference model<';
-  if (!out.includes(addRefAnchor)) {
-    throw new PatchAnchorError(
-      'model-settings.tsx',
-      'MoA Add reference model'
-    );
-  }
-  out = out.replace(
-    '>Add reference model<',
-    `>{t.settings.model.moa.addReference}<`
-  );
+  out = replaceJsxText(out, 'Add reference model', '{t.settings.model.moa.addReference}', 'model-settings.tsx', 'MoA Add reference model');
   changed = true;
 
   // 13. 'Aggregator' title → t('settings.model.moa.aggregator')
@@ -523,182 +525,55 @@ function patchCustomEndpoints(content) {
   changed = true;
 
   // 4. 'Name' label
-  const nameLabelAnchor = '>Name<';
-  if (!out.includes(nameLabelAnchor)) {
-    throw new PatchAnchorError('custom-endpoints-settings.tsx', 'Name label');
-  }
-  out = out.replace(
-    '>Name<',
-    '>{t.settings.customEndpoints.name}<'
-  );
+  out = replaceJsxText(out, 'Name', '{t.settings.customEndpoints.name}', 'custom-endpoints-settings.tsx', 'Name label');
   changed = true;
 
   // 5. 'Provider ID' label
-  const providerIdAnchor = '>Provider ID<';
-  if (!out.includes(providerIdAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Provider ID label'
-    );
-  }
-  out = out.replace(
-    '>Provider ID<',
-    '>{t.settings.customEndpoints.providerId}<'
-  );
+  out = replaceJsxText(out, 'Provider ID', '{t.settings.customEndpoints.providerId}', 'custom-endpoints-settings.tsx', 'Provider ID label');
   changed = true;
 
   // 6. 'Endpoint URL' label
-  const endpointUrlAnchor = '>Endpoint URL<';
-  if (!out.includes(endpointUrlAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Endpoint URL label'
-    );
-  }
-  out = out.replace(
-    '>Endpoint URL<',
-    '>{t.settings.customEndpoints.endpointUrl}<'
-  );
+  out = replaceJsxText(out, 'Endpoint URL', '{t.settings.customEndpoints.endpointUrl}', 'custom-endpoints-settings.tsx', 'Endpoint URL label');
   changed = true;
 
   // 7. 'Default Model' label
-  const defaultModelAnchor = '>Default Model<';
-  if (!out.includes(defaultModelAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Default Model label'
-    );
-  }
-  out = out.replace(
-    '>Default Model<',
-    '>{t.settings.customEndpoints.defaultModel}<'
-  );
+  out = replaceJsxText(out, 'Default Model', '{t.settings.customEndpoints.defaultModel}', 'custom-endpoints-settings.tsx', 'Default Model label');
   changed = true;
 
   // 8. 'Context' label
-  const contextLabelAnchor = '>Context<';
-  if (!out.includes(contextLabelAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Context label'
-    );
-  }
-  out = out.replace(
-    '>Context<',
-    '>{t.settings.customEndpoints.context}<'
-  );
+  out = replaceJsxText(out, 'Context', '{t.settings.customEndpoints.context}', 'custom-endpoints-settings.tsx', 'Context label');
   changed = true;
 
   // 9. 'API Key' label
-  const apiKeyLabelAnchor = '>API Key<';
-  if (!out.includes(apiKeyLabelAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'API Key label'
-    );
-  }
-  out = out.replace(
-    '>API Key<',
-    '>{t.settings.customEndpoints.apiKey}<'
-  );
+  out = replaceJsxText(out, 'API Key', '{t.settings.customEndpoints.apiKey}', 'custom-endpoints-settings.tsx', 'API Key label');
   changed = true;
 
   // 10. 'Use for new chats' label
-  const useForNewAnchor = '>Use for new chats<';
-  if (!out.includes(useForNewAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Use for new chats label'
-    );
-  }
-  out = out.replace(
-    '>Use for new chats<',
-    '>{t.settings.customEndpoints.useForNewChats}<'
-  );
+  out = replaceJsxText(out, 'Use for new chats', '{t.settings.customEndpoints.useForNewChats}', 'custom-endpoints-settings.tsx', 'Use for new chats label');
   changed = true;
 
   // 11. 'Discover models' label
-  const discoverModelsAnchor = '>Discover models<';
-  if (!out.includes(discoverModelsAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Discover models label'
-    );
-  }
-  out = out.replace(
-    '>Discover models<',
-    '>{t.settings.customEndpoints.discoverModels}<'
-  );
+  out = replaceJsxText(out, 'Discover models', '{t.settings.customEndpoints.discoverModels}', 'custom-endpoints-settings.tsx', 'Discover models label');
   changed = true;
 
   // 12. 'Test' button text
-  const testButtonAnchor = '>Test<';
-  if (!out.includes(testButtonAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Test button text'
-    );
-  }
-  out = out.replace(
-    '>Test<',
-    '>{t.settings.customEndpoints.test}<'
-  );
+  out = replaceJsxText(out, 'Test', '{t.settings.customEndpoints.test}', 'custom-endpoints-settings.tsx', 'Test button text');
   changed = true;
 
   // 13. 'Save' button text
-  const saveButtonAnchor = '>Save<';
-  if (!out.includes(saveButtonAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Save button text'
-    );
-  }
-  out = out.replace(
-    '>Save<',
-    `>{t.settings.customEndpoints.save}<`
-  );
+  out = replaceJsxText(out, 'Save', '{t.settings.customEndpoints.save}', 'custom-endpoints-settings.tsx', 'Save button text');
   changed = true;
 
   // 14. 'New endpoint' button text
-  const newEndpointAnchor = '>New endpoint<';
-  if (!out.includes(newEndpointAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'New endpoint button text'
-    );
-  }
-  out = out.replace(
-    '>New endpoint<',
-    `>{t.settings.customEndpoints.newEndpoint}<`
-  );
+  out = replaceJsxText(out, 'New endpoint', '{t.settings.customEndpoints.newEndpoint}', 'custom-endpoints-settings.tsx', 'New endpoint button text');
   changed = true;
 
   // 15. 'Active' pill label (inside checkmark)
-  const activePillAnchor = '>Active<';
-  if (!out.includes(activePillAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Active pill label'
-    );
-  }
-  out = out.replace(
-    '>Active<',
-    `>{t.settings.customEndpoints.active}<`
-  );
+  out = replaceJsxText(out, 'Active', '{t.settings.customEndpoints.active}', 'custom-endpoints-settings.tsx', 'Active pill label');
   changed = true;
 
   // 16. 'Use' button text
-  const useButtonAnchor = '>Use<';
-  if (!out.includes(useButtonAnchor)) {
-    throw new PatchAnchorError(
-      'custom-endpoints-settings.tsx',
-      'Use button text'
-    );
-  }
-  out = out.replace(
-    '>Use<',
-    `>{t.settings.customEndpoints.use}<`
-  );
+  out = replaceJsxText(out, 'Use', '{t.settings.customEndpoints.use}', 'custom-endpoints-settings.tsx', 'Use button text');
   changed = true;
 
   // 17. 'Delete endpoint' title attribute
@@ -805,14 +680,7 @@ function patchBillingIndex(content) {
   let out = content;
 
   // 1. 'Billing' header text
-  const billingTitleAnchor = '>Billing<';
-  if (!out.includes(billingTitleAnchor)) {
-    throw new PatchAnchorError('billing/index.tsx', 'Billing header');
-  }
-  out = out.replace(
-    '>Billing<',
-    `>{t.settings.billing.title}<`
-  );
+  out = replaceJsxText(out, 'Billing', '{t.settings.billing.title}', 'billing/index.tsx', 'Billing header');
   changed = true;
 
   // 2. 'Plan' section heading
@@ -888,25 +756,11 @@ function patchBillingIndex(content) {
   changed = true;
 
   // 8. 'Retry' button
-  const retryAnchor = '>Retry<';
-  if (!out.includes(retryAnchor)) {
-    throw new PatchAnchorError('billing/index.tsx', 'Retry button');
-  }
-  out = out.replace(
-    '>Retry<',
-    `>{t.settings.billing.retry}<`
-  );
+  out = replaceJsxText(out, 'Retry', '{t.settings.billing.retry}', 'billing/index.tsx', 'Retry button');
   changed = true;
 
   // 9. 'Buy' button
-  const buyAnchor = '>Buy<';
-  if (!out.includes(buyAnchor)) {
-    throw new PatchAnchorError('billing/index.tsx', 'Buy button');
-  }
-  out = out.replace(
-    '>Buy<',
-    `>{t.settings.billing.buy}<`
-  );
+  out = replaceJsxText(out, 'Buy', '{t.settings.billing.buy}', 'billing/index.tsx', 'Buy button');
   changed = true;
 
   return { content: out, changed };
@@ -925,53 +779,19 @@ function patchPlansView(content) {
   let out = content;
 
   // 1. 'Plans' header
-  const plansHeaderAnchor = '>Plans<';
-  if (!out.includes(plansHeaderAnchor)) {
-    throw new PatchAnchorError('billing/plans-view.tsx', 'Plans header');
-  }
-  out = out.replace(
-    '>Plans<',
-    `>{t.settings.billing.plans}<`
-  );
+  out = replaceJsxText(out, 'Plans', '{t.settings.billing.plans}', 'billing/plans-view.tsx', 'Plans header');
   changed = true;
 
   // 2. 'Current plan' pill
-  const currentPlanAnchor = '>Current plan<';
-  if (!out.includes(currentPlanAnchor)) {
-    throw new PatchAnchorError(
-      'billing/plans-view.tsx',
-      'Current plan pill'
-    );
-  }
-  out = out.replace(
-    '>Current plan<',
-    `>{t.settings.billing.currentPlan}<`
-  );
+  out = replaceJsxText(out, 'Current plan', '{t.settings.billing.currentPlan}', 'billing/plans-view.tsx', 'Current plan pill');
   changed = true;
 
   // 3. 'Scheduled' pill
-  const scheduledAnchor = '>Scheduled<';
-  if (!out.includes(scheduledAnchor)) {
-    throw new PatchAnchorError('billing/plans-view.tsx', 'Scheduled pill');
-  }
-  out = out.replace(
-    '>Scheduled<',
-    `>{t.settings.billing.scheduled}<`
-  );
+  out = replaceJsxText(out, 'Scheduled', '{t.settings.billing.scheduled}', 'billing/plans-view.tsx', 'Scheduled pill');
   changed = true;
 
   // 4. 'Downgrade' button
-  const downgradeAnchor = '>Downgrade<';
-  if (!out.includes(downgradeAnchor)) {
-    throw new PatchAnchorError(
-      'billing/plans-view.tsx',
-      'Downgrade button'
-    );
-  }
-  out = out.replace(
-    '>Downgrade<',
-    `>{t.settings.billing.downgrade}<`
-  );
+  out = replaceJsxText(out, 'Downgrade', '{t.settings.billing.downgrade}', 'billing/plans-view.tsx', 'Downgrade button');
   changed = true;
 
   // 5. 'Confirm downgrade' button
@@ -989,14 +809,7 @@ function patchPlansView(content) {
   changed = true;
 
   // 6. 'Try again' button
-  const tryAgainAnchor = '>Try again<';
-  if (!out.includes(tryAgainAnchor)) {
-    throw new PatchAnchorError('billing/plans-view.tsx', 'Try again button');
-  }
-  out = out.replace(
-    '>Try again<',
-    `>{t.settings.billing.tryAgain}<`
-  );
+  out = replaceJsxText(out, 'Try again', '{t.settings.billing.tryAgain}', 'billing/plans-view.tsx', 'Try again button');
   changed = true;
 
   // 7. 'Scheduling…' text
@@ -1151,8 +964,8 @@ function patchCurrentPlanCard(content) {
   let changed = false;
   let out = content;
 
-  // 1. 'Undo' button
-  const undoAnchor = `>'Undo'<`;
+  // 1. 'Undo' — строка внутри JSX-выражения {busy ? 'Undoing…' : 'Undo'}
+  const undoAnchor = `: 'Undo'}`;
   if (!out.includes(undoAnchor)) {
     throw new PatchAnchorError(
       'billing/current-plan-card.tsx',
@@ -1160,8 +973,8 @@ function patchCurrentPlanCard(content) {
     );
   }
   out = out.replace(
-    `>'Undo'<`,
-    `>{t.settings.billing.undo}<`
+    `: 'Undo'}`,
+    `: t.settings.billing.undo}`
   );
   changed = true;
 
@@ -2059,6 +1872,64 @@ const COMPONENT_FILES = {
  * Применить components-патчи ко всем трём поверхностям.
  * Возвращает { changed: string[] } или бросает PatchAnchorError.
  */
+// ---------------------------------------------------------------------------
+// ПАТЧ ru.ts — RU-блоки (зеркало patchEnTs/extendEnTsBilling).
+// Блоки генерируются scripts/gen-ru-blocks.js из PR-worktree ru.ts.
+// ---------------------------------------------------------------------------
+const RU_BLOCKS = require('./components-patch-ru-blocks.js');
+
+function findBlockEnd(out, startIdx, file, label) {
+  let depth = 0;
+  let j = out.indexOf('{', startIdx);
+  if (j < 0) throw new PatchAnchorError(file, label);
+  for (; j < out.length; j++) {
+    if (out[j] === '{') depth++;
+    else if (out[j] === '}') {
+      depth--;
+      if (depth === 0) return j;
+    }
+  }
+  throw new PatchAnchorError(file, label);
+}
+
+function patchRuTs(content) {
+  let changed = false;
+  let out = content;
+
+  // База: moa в settings.model; billing+customEndpoints в settings
+  if (!/\s+moa:\s*\{/.test(out) && !/\s+customEndpoints:\s*\{/.test(out)) {
+    const modelStart = out.search(/\n\s+model:\s*\{/);
+    if (modelStart < 0) throw new PatchAnchorError('ru.ts', 'model: { inside settings');
+    const modelEnd = findBlockEnd(out, modelStart, 'ru.ts', 'closing } of model block');
+    out = out.slice(0, modelEnd) + `,\n    ${RU_BLOCKS.moaBlock}` + out.slice(modelEnd);
+
+    const settingsStart = out.search(/\n\s+settings:\s*\{/);
+    if (settingsStart < 0) throw new PatchAnchorError('ru.ts', 'settings: { block');
+    const settingsEnd = findBlockEnd(out, settingsStart, 'ru.ts', 'closing } of settings block');
+    out =
+      out.slice(0, settingsEnd) +
+      `,\n    ${RU_BLOCKS.billingBlock}` +
+      `,\n    ${RU_BLOCKS.customEndpointsBlock}` +
+      out.slice(settingsEnd);
+    changed = true;
+  }
+
+  // Расширение billing: state + errors
+  if (!/\s+state:\s*\{/.test(out) || !/\s+errors:\s*\{/.test(out)) {
+    const billingStart = out.search(/\n\s{4,}billing:\s*\{/);
+    if (billingStart < 0) throw new PatchAnchorError('ru.ts (extend)', 'billing: { inside settings');
+    const billingEnd = findBlockEnd(out, billingStart, 'ru.ts (extend)', 'closing } of billing block');
+    out =
+      out.slice(0, billingEnd) +
+      `,\n    ${RU_BLOCKS.billingStateBlock}` +
+      `,\n    ${RU_BLOCKS.billingErrorsBlock}` +
+      out.slice(billingEnd);
+    changed = true;
+  }
+
+  return { content: out, changed };
+}
+
 function applyComponentPatches(desktopDir) {
   const dir = settingsDir(desktopDir);
   const changed = [];
@@ -2097,6 +1968,20 @@ function applyComponentPatches(desktopDir) {
     }
   }
 
+  // 2б. Патчим ru.ts теми же ключами (RU-переводы)
+  const ruPath = path.join(i18nDir(desktopDir), 'ru.ts');
+  if (fs.existsSync(ruPath)) {
+    const ruRaw = fs.readFileSync(ruPath);
+    const ruEol = detectEol(ruRaw.toString('utf8'));
+    const ruR = patchRuTs(toUnix(ruRaw.toString('utf8')));
+    if (ruR.changed) {
+      originals['ru.ts'] = ruRaw;
+      eols['ru.ts'] = ruEol;
+      patched['ru.ts'] = ruR.content;
+      changed.push('ru.ts');
+    }
+  }
+
   if (changed.length === 0) {
     return { changed: [], already: true };
   }
@@ -2116,8 +2001,8 @@ function applyComponentPatches(desktopDir) {
   // 4. Запись
   for (const [relPath, content] of Object.entries(patched)) {
     let filePath;
-    if (relPath === 'en.ts') {
-      filePath = path.join(i18nDir(desktopDir), 'en.ts');
+    if (relPath === 'en.ts' || relPath === 'ru.ts') {
+      filePath = path.join(i18nDir(desktopDir), relPath);
     } else {
       filePath = path.join(dir, relPath);
     }

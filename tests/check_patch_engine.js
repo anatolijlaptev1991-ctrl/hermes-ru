@@ -20,7 +20,7 @@ const engine = require('../src/patch-engine.js');
 // Фикстуры
 // ---------------------------------------------------------------------------
 
-const RU_TS = "import { defineLocale } from './define-locale'\n\nexport const ru = defineLocale({\n  common: { apply: 'Применить' },\n})\n";
+const RU_TS = "import { defineLocale } from './define-locale'\n\nexport const ru = defineLocale({\n  common: { apply: 'Применить' },\n  settings: {\n    model: {\n      loading: 'Загрузка…',\n    },\n  },\n})\n";
 
 function typesFile(locales) {
   return `// Desktop i18n type contract.\n\nexport type Locale = ${locales.map(l => `'${l}'`).join(' | ')}\n\nexport type Translations = {\n  common: { apply: string }\n}\n`;
@@ -230,7 +230,12 @@ export function MoaSection() {
           <SelectValue placeholder="Preset" />
         </SelectTrigger>
       </Select>
-      <label>Enabled<Switch checked={true} /></label>
+      <label className="flex items-center gap-2 rounded-sm border border-border px-2 py-1 text-xs">
+              Enabled
+              <Switch
+                checked={true}
+              />
+            </label>
       <Button>Set default</Button>
       <Button
             variant="ghost"
@@ -239,7 +244,9 @@ export function MoaSection() {
             </Button>
       <Input placeholder="new preset" />
       <Button>Add preset</Button>
-      <div>Default:<span>default</span></div>
+      <div className="mb-2 text-xs text-muted-foreground">
+            Default: <span className="font-mono">default</span>
+          </div>
       <ListRow title={\`Reference \${index + 1}\`} />
       <Button
                     variant="ghost"
@@ -336,7 +343,9 @@ const AUTO_RELOAD_FIXTURE = `export function AutoReloadRow() {
 const CURRENT_PLAN_FIXTURE = `export function CurrentPlanCard() {
   return (
     <div>
-      <Button>'Undo'</Button>
+      <Button disabled={resumeFlow.busy} onClick={() => void resumeFlow.resume()} size="sm" type="button">
+              {resumeFlow.busy ? 'Undoing…' : 'Undo'}
+            </Button>
     </div>
   )
 }
