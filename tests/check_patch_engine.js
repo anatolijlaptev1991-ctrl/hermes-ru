@@ -385,6 +385,8 @@ function makeComponentsDesktop(t, { eol = '\\n', patches = true } = {}) {
     wr('billing/plans-view.tsx', PLANS_VIEW_FIXTURE);
     wr('billing/auto-reload-row.tsx', AUTO_RELOAD_FIXTURE);
     wr('billing/current-plan-card.tsx', CURRENT_PLAN_FIXTURE);
+    wr('billing/use-billing-state.ts', USE_BILLING_STATE_FIXTURE);
+    wr('billing/errors.ts', ERRORS_FIXTURE);
     wr(path.join(i18n, 'en.ts'), EN_TS_FIXTURE);
   }
 
@@ -419,6 +421,8 @@ test('F11: components-patch — apply → verify → идемпотентнос�
   wr('billing/plans-view.tsx', PLANS_VIEW_FIXTURE);
   wr('billing/auto-reload-row.tsx', AUTO_RELOAD_FIXTURE);
   wr('billing/current-plan-card.tsx', CURRENT_PLAN_FIXTURE);
+  wr('billing/use-billing-state.ts', USE_BILLING_STATE_FIXTURE);
+  wr('billing/errors.ts', ERRORS_FIXTURE);
 
   // Проверяем, что строки хардкожены (до патча)
   const moaBefore = fs.readFileSync(path.join(settings, 'model-settings.tsx'), 'utf8');
@@ -486,11 +490,13 @@ test('F11b: components-patch — все 6 компонентов + en.ts пат�
   wr('billing/plans-view.tsx', PLANS_VIEW_FIXTURE);
   wr('billing/auto-reload-row.tsx', AUTO_RELOAD_FIXTURE);
   wr('billing/current-plan-card.tsx', CURRENT_PLAN_FIXTURE);
+  wr('billing/use-billing-state.ts', USE_BILLING_STATE_FIXTURE);
+  wr('billing/errors.ts', ERRORS_FIXTURE);
   wr('i18n/en.ts', EN_TS_FIXTURE);
 
   const cp = require('../src/components-patch.js');
   const result = cp.applyComponentPatches(desktop);
-  assert.ok(result.changed.length >= 6, `Ожидалось ≥6 изменённых файлов, получено: ${result.changed.join(', ')}`);
+  assert.ok(result.changed.length >= 8, `Ожидалось ≥8 изменённых файлов, получено: ${result.changed.join(', ')}`);
 
   // Идемпотентность
   const result2 = cp.applyComponentPatches(desktop);
@@ -517,11 +523,323 @@ test('F11c: components-patch — битый якорь в model-settings.tsx →
   fs.writeFileSync(path.join(billing, 'plans-view.tsx'), PLANS_VIEW_FIXTURE);
   fs.writeFileSync(path.join(billing, 'auto-reload-row.tsx'), AUTO_RELOAD_FIXTURE);
   fs.writeFileSync(path.join(billing, 'current-plan-card.tsx'), CURRENT_PLAN_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'use-billing-state.ts'), USE_BILLING_STATE_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'errors.ts'), ERRORS_FIXTURE);
 
   const cp = require('../src/components-patch.js');
   assert.throws(
     () => cp.applyComponentPatches(desktop),
     (err) => err.name === 'PatchAnchorError' && err.message.includes('Mixture of Agents'),
     'Должен быть PatchAnchorError при битом якоре MoA'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// F12: components-patch — use-billing-state.ts и errors.ts
+// ---------------------------------------------------------------------------
+
+// Мини-фикстуры с реальными якорными строками из Hermes 0.19.0
+// ВАЖНО: байт-в-байт совпадают с реальными файлами!
+
+const USE_BILLING_STATE_FIXTURE = `import { useQuery } from '@tanstack/react-query'
+import { fmtDate } from '@/lib/time'
+import type { BillingRefusal, BillingResult } from './api'
+import { useBillingApi } from './api'
+import { resolveRefusal } from './errors'
+import type { BillingStateResponse, SubscriptionStateResponse, SubscriptionTierOption, UsageModelData } from './types'
+
+export const EMPTY_BILLING_VALUE = '—'
+
+const BILLING_QUERY_OPTIONS = {
+  refetchInterval: 30_000,
+  refetchOnMount: 'always',
+  refetchOnWindowFocus: true,
+  retry: false,
+  staleTime: 0
+} as const
+
+export function deriveBillingView(
+  stateResult?: BillingResult<BillingStateResponse>,
+  subscriptionResult?: BillingResult<SubscriptionStateResponse>
+) {
+  if (!stateResult) {
+    return { status: 'loading', summary: [], tiers: [], usageRows: [] }
+  }
+  if (!stateResult.ok) {
+    return { notice: refusalNotice(stateResult.refusal), status: 'refusal', summary: [], tiers: [], usageRows: [] }
+  }
+  const billing = stateResult.data
+  const subscription = subscriptionResult?.ok ? subscriptionResult.data : null
+  if (!billing.logged_in || subscription?.logged_in === false) {
+    return {
+      notice: {
+        action: { label: 'Open portal \u2197', url: billing.portal_url ?? subscription?.portal_url },
+        message: 'Run /portal in the TUI or open the Nous portal to connect your account.',
+        title: 'Connect your Nous account'
+      },
+      status: 'logged_out',
+      summary: [],
+      tiers: [],
+      usageRows: []
+    }
+  }
+  return {
+    paymentRow: paymentMethodRow(billing),
+    refillRow: autoReloadRow(billing),
+    status: 'normal',
+    summary: [
+      { label: 'Balance', value: '—' },
+      { label: 'Plan', value: '—' },
+      { label: 'Auto-refill', value: billing.auto_reload ? (billing.auto_reload.enabled ? 'Enabled' : 'Off') : '—' }
+    ],
+    tiers: [],
+    topupRow: buyCreditsRow(billing),
+    usageRows: deriveUsageRows(billing, subscription)
+  }
+}
+
+function refusalNotice(refusal: BillingRefusal) {
+  return {
+    action: refusal.portalUrl ? { label: 'Open portal \u2197', url: refusal.portalUrl } : undefined,
+    message: 'msg',
+    title: 'title',
+    tone: 'warn'
+  }
+}
+
+function noCardNotice(billing: BillingStateResponse) {
+  if (billing.card) return undefined
+  return {
+    action: { label: 'Add card \u2197', url: billing.portal_url },
+    message: 'Buying top-up credits and auto-refill stay disabled until a card is on file. Add one on the portal.',
+    title: 'No payment method on file',
+    tone: 'warn'
+  }
+}
+
+function derivePlanCard() {
+  return {
+    action: { label: current ? 'Change plan' : 'View plans' },
+    caption: 'Subscription details are unavailable; opening the portal is still available.',
+    link: { label: 'Adjust plan \u2197', url: '' },
+    tierName: 'Free'
+  }
+}
+
+function derivePlanTiers() {
+  return [{ name: 'Pro', priceDisplay: '$10', tierId: 'pro', action: { label: 'Choose \u2197', url: '' }, state: 'upgrade' }]
+}
+
+function paymentMethodRow(billing: BillingStateResponse) {
+  return {
+    action: { label: 'Add payment method', url: '' },
+    description: '',
+    id: 'payment_method',
+    title: 'Payment method'
+  }
+}
+
+function buyCreditsRow(billing: BillingStateResponse) {
+  return {
+    action: { label: 'Buy' },
+    chips: [],
+    description: 'A single charge on your card, added to your balance today.',
+    id: 'buy_credits',
+    title: 'Buy credits now'
+  }
+}
+
+const AUTO_REFILL_GENERIC = 'Keep your balance topped up when it drops below your threshold.'
+
+function autoReloadRow(billing: BillingStateResponse) {
+  return {
+    action: { label: 'Manage' },
+    caption: 'Manage auto-refill from the portal.',
+    description: AUTO_REFILL_GENERIC,
+    id: 'auto_reload',
+    pill: { label: '—', tone: 'muted' },
+    title: 'Refill when low'
+  }
+}
+
+function deriveUsageRows() {
+  return [
+    {
+      bar: { label: 'Subscription credits remaining', state: 'ok', tone: 'subscription', value: 0.8 },
+      caption: \`Resets \${'—'}\`,
+      id: 'subscription_credits',
+      title: 'Subscription credits',
+      value: '$80 of $100 left'
+    },
+    {
+      caption: 'Does not expire',
+      id: 'topup_credits',
+      title: 'Top-up credits',
+      value: '$50'
+    },
+    {
+      bar: { label: 'Monthly spend cap used', state: 'ok', tone: 'cap', value: 0.3 },
+      caption: cap.is_default_ceiling ? 'Default ceiling' : 'Monthly remote spending',
+      id: 'monthly_cap',
+      title: 'Monthly spend cap',
+      value: \`\${'$30'} of \${'$100'} used\`
+    }
+  ]
+}
+`;
+
+const ERRORS_FIXTURE = `import type { BillingRefusal } from './api'
+
+export interface BillingRefusalPresentation {
+  action: { type: 'none' } | { type: 'portal'; url?: string } | { type: 'retry' } | { type: 'step_up' }
+  message: string
+  title: string
+}
+
+const portalAction = (url?: string): BillingRefusalPresentation['action'] => ({ type: 'portal', url })
+
+export const resolveRefusal = (refusal: BillingRefusal): BillingRefusalPresentation => {
+  switch (refusal.kind) {
+    case 'consent_required':
+      return {
+        action: portalAction(refusal.portalUrl),
+        message: 'Confirm this card for terminal charges in the portal',
+        title: 'Card confirmation needed'
+      }
+
+    case 'monthly_cap_exceeded':
+      return {
+        action: portalAction(refusal.portalUrl),
+        message: '🔴 Monthly spend cap reached.',
+        title: 'Monthly spend cap reached'
+      }
+
+    case 'rate_limited':
+      return {
+        action: { type: 'retry' },
+        message: \`🟡 Too many charges right now\${''}. This isn't a payment failure.\`,
+        title: 'Too many charges right now'
+      }
+
+    case 'stripe_unavailable':
+      return {
+        action: { type: 'retry' },
+        message: \`Stripe is having trouble — try again shortly\${''}\`,
+        title: 'Stripe is having trouble'
+      }
+
+    case 'upgrade_cap_exceeded':
+      return {
+        action: { type: 'none' },
+        message: 'Daily plan-change limit reached — try again tomorrow',
+        title: 'Daily plan-change limit reached'
+      }
+
+    default:
+      return {
+        action: { type: 'none' },
+        message: 'Billing request failed.',
+        title: 'Billing request failed'
+      }
+  }
+}
+`;
+
+// F12: apply → verify → идемпотентность (use-billing-state + errors)
+test('F12: components-patch — use-billing-state.ts + errors.ts apply → verify → идемпотентность', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ru-f12-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const desktop = path.join(root, 'apps', 'desktop');
+  const settings = path.join(desktop, 'src', 'app', 'settings');
+  const billing = path.join(settings, 'billing');
+  const i18n = path.join(desktop, 'src', 'i18n');
+  fs.mkdirSync(billing, { recursive: true });
+  fs.mkdirSync(i18n, { recursive: true });
+  fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+
+  fs.writeFileSync(path.join(billing, 'use-billing-state.ts'), USE_BILLING_STATE_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'errors.ts'), ERRORS_FIXTURE);
+  fs.writeFileSync(path.join(i18n, 'types.ts'), "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar' | 'ru'\\nexport type Translations = { common: { apply: string } }\\n");
+  fs.writeFileSync(path.join(i18n, 'catalog.ts'), "import { en } from './en'\\nimport { ru } from './ru'\\nexport const TRANSLATIONS: Record<Locale, Translations> = { en, ru }\\n");
+  fs.writeFileSync(path.join(i18n, 'languages.ts'), "import type { Locale } from './types'\\nexport const DEFAULT_LOCALE: Locale = 'en'\\nexport const LOCALE_OPTIONS = [{ id: 'en', name: 'English', englishName: 'English', configValue: 'en' }]\\n");
+  fs.writeFileSync(path.join(i18n, 'en.ts'), `import { defineLocale } from './define-locale'
+
+export const en = defineLocale({
+  common: { apply: 'Apply' },
+  settings: {
+    model: {
+      provider: 'Provider',
+      model: 'Model',
+    },
+    billing: {
+      title: 'Billing',
+      plan: 'Plan',
+      paymentCredits: 'Payment & credits',
+      usage: 'Usage',
+      plans: 'Plans',
+    },
+  },
+})
+`);
+
+  const cp = require('../src/components-patch.js');
+
+  // Применяем компонентный патч только к use-billing-state и errors
+  const r = cp.patchUseBillingState(USE_BILLING_STATE_FIXTURE);
+  assert.ok(r.changed, 'use-billing-state.ts должен измениться');
+  assert.ok(r.content.includes("translateNow('settings.billing.state."), 'state-ключи должны появиться');
+
+  const r2 = cp.patchErrors(ERRORS_FIXTURE);
+  assert.ok(r2.changed, 'errors.ts должен измениться');
+  assert.ok(r2.content.includes("translateNow('settings.billing.errors."), 'errors-ключи должны появиться');
+
+  // Идемпотентность
+  const r3 = cp.patchUseBillingState(r.content);
+  assert.equal(r3.changed, false, 'use-billing-state: повторный прогон должен быть no-op');
+
+  const r4 = cp.patchErrors(r2.content);
+  assert.equal(r4.changed, false, 'errors: повторный прогон должен быть no-op');
+
+  // extendEnTsBilling должен работать
+  const enBefore = fs.readFileSync(path.join(i18n, 'en.ts'), 'utf8');
+  const enR = cp.extendEnTsBilling(enBefore);
+  assert.ok(enR.changed, 'en.ts should be extended with state/errors');
+  assert.ok(enR.content.includes('state: {'), 'state block should be present');
+  assert.ok(enR.content.includes('errors: {'), 'errors block should be present');
+  assert.ok(enR.content.includes("openPortal: 'Open portal"), 'openPortal key should be present');
+  assert.ok(enR.content.includes("monthlyCapExceeded: 'Monthly spend cap reached'"), 'monthlyCapExceeded key should be present');
+
+  // Идемпотентность extendEnTsBilling
+  const enR2 = cp.extendEnTsBilling(enR.content);
+  assert.equal(enR2.changed, false, 'extendEnTsBilling: повторный прогон должен быть no-op');
+});
+
+// F12b: битый якорь → PatchAnchorError
+test('F12b: components-patch — битый якорь в use-billing-state.ts → PatchAnchorError', (t) => {
+  const cp = require('../src/components-patch.js');
+
+  const broken = USE_BILLING_STATE_FIXTURE.replace(
+    "label: 'Open portal \u2197', url: billing.portal_url ?? subscription?.portal_url",
+    "label: 'Something Else', url: billing.portal_url ?? subscription?.portal_url"
+  );
+  assert.throws(
+    () => cp.patchUseBillingState(broken),
+    (err) => err.name === 'PatchAnchorError',
+    'Должен быть PatchAnchorError при битом якоре'
+  );
+});
+
+// F12c: битый якорь в errors.ts → PatchAnchorError
+test('F12c: components-patch — битый якорь в errors.ts → PatchAnchorError', (t) => {
+  const cp = require('../src/components-patch.js');
+
+  const broken = ERRORS_FIXTURE.replace(
+    "import type { BillingRefusal } from './api'",
+    "import type { SomethingElse } from './api'"
+  );
+  assert.throws(
+    () => cp.patchErrors(broken),
+    (err) => err.name === 'PatchAnchorError',
+    'Должен быть PatchAnchorError при битом якоре'
   );
 });

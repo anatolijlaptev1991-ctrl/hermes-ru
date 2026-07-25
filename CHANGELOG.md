@@ -1,6 +1,15 @@
 # История изменений hermes-ru
 
-## v1.1.0 (2026-07-25)
+## v1.1.1 (2026-07-26)
+
+**components-patch — usage-панель биллинга и баннеры ошибок (110+ новых ключей):**
+
+- **use-billing-state.ts** (`billing/use-billing-state.ts`): 40+ атомарных замен хардкода → `translateNow('settings.billing.state.*')` (Open portal ↗, Subscription credits, Top-up credits, Monthly spend cap, Does not expire, Refill when low, Payment method, Change plan, Adjust plan ↗, Choose ↗, Enabled, Off, и др.).
+- **errors.ts** (`billing/errors.ts`): 35+ атомарных замен хардкода → `translateNow('settings.billing.errors.*')` (Card confirmation needed, Monthly spend cap reached, Remote spending needs approval, Session logged out, Admin role required, Stripe is having trouble, Daily plan-change limit reached, и др.).
+- **en.ts**: структурная вставка `settings.billing.state` и `settings.billing.errors` в существующую секцию billing (110+ новых ключей).
+- **Идемпотентность**: повторный прогон = no-op (детект по наличию `translateNow('settings.billing.state.…')` / `translateNow('settings.billing.errors.…')`).
+- **Тесты F12**: apply → verify → идемпотентность → rollback (фикстуры с реальными якорными строками 0.19.0).
+- Глоссарий русских переводов: subscription credits → «Кредиты подписки», top-up credits → «Пополняемые кредиты», monthly spend cap → «Месячный лимит расходов», does not expire → «Не сгорает», refill when low → «Автопополнение», payment method → «Способ оплаты».
 
 **components-patch — структурная i18n-проводка трёх захардкоженных поверхностей настроек 0.19.0:**
 

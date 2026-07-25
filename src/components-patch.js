@@ -138,6 +138,116 @@ const NEW_EN_KEYS = {
     cancel: 'Cancel',
     usageLabel: (label) => `${label} usage`,
   },
+  'settings.billing.state': {
+    openPortal: 'Open portal ↗',
+    openPortalShort: 'Open portal',
+    connectMessage:
+      'Run /portal in the TUI or open the Nous portal to connect your account.',
+    connectTitle: 'Connect your Nous account',
+    addCard: 'Add card ↗',
+    noPaymentMethod: 'No payment method on file',
+    noCardMessage:
+      'Buying top-up credits and auto-refill stay disabled until a card is on file. Add one on the portal.',
+    addPaymentMethod: 'Add payment method',
+    paymentMethod: 'Payment method',
+    update: 'Update',
+    manageCardDesc:
+      'Manage the card used for top-ups and subscription renewals.',
+    buy: 'Buy',
+    buyCreditsDesc:
+      'A single charge on your card, added to your balance today.',
+    buyCreditsNow: 'Buy credits now',
+    autoRefillGeneric:
+      'Keep your balance topped up when it drops below your threshold.',
+    manage: 'Manage',
+    manageAutoRefillCaption: 'Manage auto-refill from the portal.',
+    refillWhenLow: 'Refill when low',
+    turnOnAutoRefillCaption: 'Turn on auto-refill from the portal',
+    reconcile: 'Reconcile ↗',
+    autoRefillCard: 'auto-refill card',
+    customerDefault: 'customer default',
+    subscriptionCard: 'subscription card',
+    subscriptionCreditsRemaining: 'Subscription credits remaining',
+    subscriptionCredits: 'Subscription credits',
+    doesNotExpire: 'Does not expire',
+    topUpCredits: 'Top-up credits',
+    monthlySpendCapUsed: 'Monthly spend cap used',
+    monthlySpendCap: 'Monthly spend cap',
+    defaultCeiling: 'Default ceiling',
+    monthlyRemoteSpending: 'Monthly remote spending',
+    changePlan: 'Change plan',
+    viewPlans: 'View plans',
+    adjustPlan: 'Adjust plan ↗',
+    choose: 'Choose ↗',
+    enabled: 'Enabled',
+    off: 'Off',
+    subscriptionUnavailable:
+      'Subscription details are unavailable; opening the portal is still available.',
+    noActiveSubscription:
+      'No active subscription — paid models draw down top-up credits.',
+    changesTo: (tierName, when) => `Changes to ${tierName} on ${when}.`,
+    cancelsOn: (when) => `Cancels on ${when}.`,
+    renews: (renewal) => `Renews ${renewal}`,
+    autoRefillReconcile: (cardLabel) =>
+      `Auto-refill charges ${cardLabel} — reconcile on the portal`,
+    autoRefillCharges: (reloadTo, threshold) =>
+      `Charges ${reloadTo} automatically when your balance falls below ${threshold}.`,
+    resetsOn: (date) => `Resets ${date}`,
+    ofUsed: (spent, limit) => `${spent} of ${limit} used`,
+    remoteSpendingReconnect: (who) =>
+      `${who} Reconnect from Settings → Gateway to re-authorize this device.`,
+  },
+  'settings.billing.errors': {
+    cardConfirmationNeeded: 'Card confirmation needed',
+    cardConfirmationMessage:
+      'Confirm this card for terminal charges in the portal',
+    remoteSpendingNeedsApproval: 'Remote Spending needs approval',
+    remoteSpendingMessage:
+      'This needs Remote Spending allowed. Start a top-up to allow it, then retry.',
+    remoteSpendingStopped: 'Remote spending was stopped',
+    adminStopped: 'An admin stopped remote spending for this terminal.',
+    youStopped: 'You stopped remote spending for this terminal.',
+    sessionLoggedOut: 'Session logged out',
+    sessionLoggedOutMessage:
+      'Your session was logged out. Sign in again from Settings → Gateway.',
+    remoteSpendingOff: 'Remote spending is off',
+    remoteSpendingOffMessage:
+      "Remote spending is off for this account — a billing admin can turn it on from the portal's Hermes Agent page.",
+    adminRoleRequired: 'Admin role required',
+    adminRoleRequiredMessage:
+      'Adding funds needs an org admin/owner. Ask an admin, or manage on the portal.',
+    startFreshTopUp: 'Start a fresh top-up',
+    idempotencyConflictMessage:
+      '🔴 That charge key was already used for a different amount. Start a fresh top-up.',
+    noSavedCard: 'No saved card',
+    noSavedCardMessage:
+      '💳 No saved card for terminal charges yet. Set one up on the portal (one-time credit buys don\'t save a reusable card).',
+    orgAccessDenied: 'Org access denied',
+    orgAccessDeniedMessage: "This token isn't bound to an org you can manage",
+    monthlyCapExceeded: 'Monthly spend cap reached',
+    monthlyCapExceededWithRemaining: (remaining) =>
+      `🔴 Monthly spend cap reached — $${remaining} headroom left.`,
+    monthlyCapExceededSimple: '🔴 Monthly spend cap reached.',
+    tooManyCharges: 'Too many charges right now',
+    rateLimitedMessage: (mins) =>
+      `🟡 Too many charges right now${mins}. This isn't a payment failure.`,
+    stripeTrouble: 'Stripe is having trouble',
+    stripeRetryMessage: (mins) =>
+      `Stripe is having trouble — try again shortly${mins}`,
+    dailyPlanChangeLimit: 'Daily plan-change limit reached',
+    dailyPlanChangeLimitMessage:
+      'Daily plan-change limit reached — try again tomorrow',
+    endpointUnavailable: 'Billing endpoint unavailable',
+    endpointUnavailableMessage:
+      'Billing endpoint returned a non-JSON response (it may not be available on this deployment).',
+    requestTimedOut: 'Billing request timed out',
+    requestTimedOutMessage: 'Billing request timed out.',
+    connectionFailed: 'Billing connection failed',
+    connectionFailedMessage:
+      'Billing request failed before reaching the gateway.',
+    requestFailed: 'Billing request failed',
+    requestFailedMessage: 'Billing request failed.',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -163,6 +273,8 @@ function i18nDir(desktopDir) {
 function _isPatched(content) {
   return /t\(['"]settings\.model\.moa\./.test(content) ||
     /t\(['"]settings\.customEndpoints\./.test(content) ||
+    /t\(['"]settings\.billing\.state\./.test(content) ||
+    /t\(['"]settings\.billing\.errors\./.test(content) ||
     /t\(['"]settings\.billing\./.test(content);
 }
 
@@ -1064,7 +1176,788 @@ function patchCurrentPlanCard(content) {
 }
 
 // ---------------------------------------------------------------------------
-// ПАТЧ 7: Добавление новых ключей в en.ts
+// ПАТЧ 7: billing/use-billing-state.ts — usage-панель и derive-функции
+// ---------------------------------------------------------------------------
+
+function patchUseBillingState(content) {
+  if (/translateNow\(['"]settings\.billing\.state\./.test(content)) {
+    return { content, changed: false };
+  }
+
+  let changed = false;
+  let out = content;
+
+  // 0. Добавляем импорт translateNow, если ещё нет
+  if (!out.includes("import { translateNow }")) {
+    const importAnchor = "import { resolveRefusal } from './errors'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('billing/use-billing-state.ts', 'resolveRefusal import');
+    }
+    out = out.replace(
+      importAnchor,
+      "import { resolveRefusal } from './errors'\nimport { translateNow } from '@/i18n'"
+    );
+    changed = true;
+  }
+
+  // 1. 'Open portal ↗' (logged_out action) → translateNow('settings.billing.state.openPortal')
+  const lpAnchor1 = "label: 'Open portal ↗', url: billing.portal_url ?? subscription?.portal_url";
+  if (!out.includes(lpAnchor1)) {
+    throw new PatchAnchorError('use-billing-state.ts', 'logged_out Open portal ↗ anchor');
+  }
+  out = out.replace(
+    "label: 'Open portal ↗', url: billing.portal_url ?? subscription?.portal_url",
+    "label: translateNow('settings.billing.state.openPortal'), url: billing.portal_url ?? subscription?.portal_url"
+  );
+  changed = true;
+
+  // 2. 'Run /portal in the TUI...' → translateNow('settings.billing.state.connectMessage')
+  const connectMsgAnchor = "'Run /portal in the TUI or open the Nous portal to connect your account.'";
+  if (!out.includes(connectMsgAnchor)) {
+    throw new PatchAnchorError('use-billing-state.ts', 'connectMessage anchor');
+  }
+  out = out.replace(
+    connectMsgAnchor,
+    "translateNow('settings.billing.state.connectMessage')"
+  );
+  changed = true;
+
+  // 3. 'Connect your Nous account' → translateNow('settings.billing.state.connectTitle')
+  const connectTitleAnchor = "'Connect your Nous account'";
+  if (!out.includes(connectTitleAnchor)) {
+    throw new PatchAnchorError('use-billing-state.ts', 'connectTitle anchor');
+  }
+  out = out.replace(
+    connectTitleAnchor,
+    "translateNow('settings.billing.state.connectTitle')"
+  );
+  changed = true;
+
+  // 4. 'Open portal ↗' в refusalNotice (label: 'Open portal ↗', url: portalUrl)
+  const lpAnchor2 = "label: 'Open portal ↗', url: portalUrl";
+  if (out.includes(lpAnchor2)) {
+    out = out.replace(
+      "label: 'Open portal ↗', url: portalUrl",
+      "label: translateNow('settings.billing.state.openPortal'), url: portalUrl"
+    );
+    changed = true;
+  }
+
+  // 5. 'Add card ↗' → translateNow('settings.billing.state.addCard')
+  const addCardAnchor = "'Add card ↗'";
+  if (out.includes(addCardAnchor)) {
+    out = out.replace(
+      addCardAnchor,
+      "translateNow('settings.billing.state.addCard')"
+    );
+    changed = true;
+  }
+
+  // 6. noCardNotice message
+  const noCardMsgAnchor = "'Buying top-up credits and auto-refill stay disabled until a card is on file. Add one on the portal.'";
+  if (out.includes(noCardMsgAnchor)) {
+    out = out.replace(
+      noCardMsgAnchor,
+      "translateNow('settings.billing.state.noCardMessage')"
+    );
+    changed = true;
+  }
+
+  // 7. 'No payment method on file' → translateNow('settings.billing.state.noPaymentMethod')
+  const noPmAnchor = "'No payment method on file'";
+  if (out.includes(noPmAnchor)) {
+    out = out.replace(
+      noPmAnchor,
+      "translateNow('settings.billing.state.noPaymentMethod')"
+    );
+    changed = true;
+  }
+
+  // 8. 'Subscription details are unavailable...'
+  const subUnavAnchor = "'Subscription details are unavailable; opening the portal is still available.'";
+  if (out.includes(subUnavAnchor)) {
+    out = out.replace(
+      subUnavAnchor,
+      "translateNow('settings.billing.state.subscriptionUnavailable')"
+    );
+    changed = true;
+  }
+
+  // 9. 'No active subscription — paid models draw down top-up credits.'
+  const noActiveAnchor = "'No active subscription — paid models draw down top-up credits.'";
+  if (out.includes(noActiveAnchor)) {
+    out = out.replace(
+      noActiveAnchor,
+      "translateNow('settings.billing.state.noActiveSubscription')"
+    );
+    changed = true;
+  }
+
+  // 10. 'Change plan' / 'View plans' — in ternary
+  if (out.includes("current ? 'Change plan' : 'View plans'")) {
+    out = out.replace(
+      "current ? 'Change plan' : 'View plans'",
+      "current ? translateNow('settings.billing.state.changePlan') : translateNow('settings.billing.state.viewPlans')"
+    );
+    changed = true;
+  }
+
+  // 11. 'Adjust plan ↗'
+  const adjustAnchor = "'Adjust plan ↗'";
+  if (out.includes(adjustAnchor)) {
+    out = out.replace(
+      adjustAnchor,
+      "translateNow('settings.billing.state.adjustPlan')"
+    );
+    changed = true;
+  }
+
+  // 12. 'Choose ↗'
+  const chooseAnchor = "'Choose ↗'";
+  if (out.includes(chooseAnchor)) {
+    out = out.replace(
+      chooseAnchor,
+      "translateNow('settings.billing.state.choose')"
+    );
+    changed = true;
+  }
+
+  // 13. 'Add payment method'
+  const addPmAnchor = "'Add payment method'";
+  if (out.includes(addPmAnchor) && !out.includes("translateNow('settings.billing.state.addPaymentMethod')")) {
+    out = out.replace(
+      addPmAnchor,
+      "translateNow('settings.billing.state.addPaymentMethod')"
+    );
+    changed = true;
+  }
+
+  // 14. 'Payment method' (title in paymentMethodRow)
+  if (out.includes("title: 'Payment method'") && !out.includes("translateNow('settings.billing.state.paymentMethod')")) {
+    out = out.replace(
+      /title: 'Payment method'/g,
+      "title: translateNow('settings.billing.state.paymentMethod')"
+    );
+    changed = true;
+  }
+
+  // 15. 'Update' (action label)
+  const updateAnchor = "label: 'Update', url: portalUrl";
+  if (out.includes(updateAnchor)) {
+    out = out.replace(
+      updateAnchor,
+      "label: translateNow('settings.billing.state.update'), url: portalUrl"
+    );
+    changed = true;
+  }
+
+  // 16. 'Manage the card used for top-ups and subscription renewals.'
+  const manageCardAnchor = "'Manage the card used for top-ups and subscription renewals.'";
+  if (out.includes(manageCardAnchor)) {
+    out = out.replace(
+      manageCardAnchor,
+      "translateNow('settings.billing.state.manageCardDesc')"
+    );
+    changed = true;
+  }
+
+  // 17. 'Buy' (action label in buyCreditsRow)
+  const buyLabelAnchor = /label: 'Buy'/;
+  if (buyLabelAnchor.test(out) && !out.includes("translateNow('settings.billing.state.buy')")) {
+    out = out.replace(
+      /label: 'Buy'/g,
+      "label: translateNow('settings.billing.state.buy')"
+    );
+    changed = true;
+  }
+
+  // 18. 'A single charge on your card, added to your balance today.'
+  const buyDescAnchor = "'A single charge on your card, added to your balance today.'";
+  if (out.includes(buyDescAnchor) && !out.includes("translateNow('settings.billing.state.buyCreditsDesc')")) {
+    out = out.replace(
+      new RegExp(buyDescAnchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+      "translateNow('settings.billing.state.buyCreditsDesc')"
+    );
+    changed = true;
+  }
+
+  // 19. 'Buy credits now'
+  const buyNowAnchor = /title: 'Buy credits now'/;
+  if (buyNowAnchor.test(out) && !out.includes("translateNow('settings.billing.state.buyCreditsNow')")) {
+    out = out.replace(
+      /title: 'Buy credits now'/g,
+      "title: translateNow('settings.billing.state.buyCreditsNow')"
+    );
+    changed = true;
+  }
+
+  // 20. AUTO_REFILL_GENERIC
+  const refillGenericAnchor = "'Keep your balance topped up when it drops below your threshold.'";
+  if (out.includes(refillGenericAnchor)) {
+    out = out.replace(
+      refillGenericAnchor,
+      "translateNow('settings.billing.state.autoRefillGeneric')"
+    );
+    changed = true;
+  }
+
+  // 21. 'Manage' (action label)
+  const manageLabelAnchor = /label: 'Manage'(?!\w)/;
+  if (manageLabelAnchor.test(out) && !out.includes("translateNow('settings.billing.state.manage')")) {
+    out = out.replace(
+      /label: 'Manage'(?!\w)/g,
+      "label: translateNow('settings.billing.state.manage')"
+    );
+    changed = true;
+  }
+
+  // 22. 'Manage auto-refill from the portal.'
+  const manageRefillAnchor = "'Manage auto-refill from the portal.'";
+  if (out.includes(manageRefillAnchor)) {
+    out = out.replace(
+      manageRefillAnchor,
+      "translateNow('settings.billing.state.manageAutoRefillCaption')"
+    );
+    changed = true;
+  }
+
+  // 23. 'Turn on auto-refill from the portal'
+  const turnOnRefillAnchor = "'Turn on auto-refill from the portal'";
+  if (out.includes(turnOnRefillAnchor)) {
+    out = out.replace(
+      turnOnRefillAnchor,
+      "translateNow('settings.billing.state.turnOnAutoRefillCaption')"
+    );
+    changed = true;
+  }
+
+  // 24. 'Reconcile ↗'
+  const reconcileAnchor = "'Reconcile ↗'";
+  if (out.includes(reconcileAnchor)) {
+    out = out.replace(
+      reconcileAnchor,
+      "translateNow('settings.billing.state.reconcile')"
+    );
+    changed = true;
+  }
+
+  // 25. 'Refill when low' (title in autoReloadRow)
+  if (out.includes("title: 'Refill when low'") && !out.includes("translateNow('settings.billing.state.refillWhenLow')")) {
+    out = out.replace(
+      /title: 'Refill when low'/g,
+      "title: translateNow('settings.billing.state.refillWhenLow')"
+    );
+    changed = true;
+  }
+
+  // 26. 'Subscription credits remaining'
+  const subCredRemAnchor = "'Subscription credits remaining'";
+  if (out.includes(subCredRemAnchor)) {
+    out = out.replace(
+      subCredRemAnchor,
+      "translateNow('settings.billing.state.subscriptionCreditsRemaining')"
+    );
+    changed = true;
+  }
+
+  // 27. 'Subscription credits'
+  const subCredAnchor = "title: 'Subscription credits'";
+  if (out.includes(subCredAnchor)) {
+    out = out.replace(
+      subCredAnchor,
+      "title: translateNow('settings.billing.state.subscriptionCredits')"
+    );
+    changed = true;
+  }
+
+  // 28. 'Does not expire'
+  const noExpireAnchor = "'Does not expire'";
+  if (out.includes(noExpireAnchor)) {
+    out = out.replace(
+      noExpireAnchor,
+      "translateNow('settings.billing.state.doesNotExpire')"
+    );
+    changed = true;
+  }
+
+  // 29. 'Top-up credits'
+  const topUpCredAnchor = "title: 'Top-up credits'";
+  if (out.includes(topUpCredAnchor)) {
+    out = out.replace(
+      topUpCredAnchor,
+      "title: translateNow('settings.billing.state.topUpCredits')"
+    );
+    changed = true;
+  }
+
+  // 30. 'Monthly spend cap used'
+  const capUsedAnchor = "'Monthly spend cap used'";
+  if (out.includes(capUsedAnchor)) {
+    out = out.replace(
+      capUsedAnchor,
+      "translateNow('settings.billing.state.monthlySpendCapUsed')"
+    );
+    changed = true;
+  }
+
+  // 31. 'Monthly spend cap'
+  const capAnchor = "title: 'Monthly spend cap'";
+  if (out.includes(capAnchor)) {
+    out = out.replace(
+      capAnchor,
+      "title: translateNow('settings.billing.state.monthlySpendCap')"
+    );
+    changed = true;
+  }
+
+  // 32. 'Default ceiling' / 'Monthly remote spending'
+  const capCaptionAnchor = "cap.is_default_ceiling ? 'Default ceiling' : 'Monthly remote spending'";
+  if (out.includes(capCaptionAnchor)) {
+    out = out.replace(
+      capCaptionAnchor,
+      "cap.is_default_ceiling ? translateNow('settings.billing.state.defaultCeiling') : translateNow('settings.billing.state.monthlyRemoteSpending')"
+    );
+    changed = true;
+  }
+
+  // 33. Dynamic template strings
+  // `Changes to ${pending.tierName} on ${pending.when}.`
+  const changesToAnchor = '`Changes to ${pending.tierName} on ${pending.when}.`';
+  if (out.includes(changesToAnchor)) {
+    out = out.replace(
+      changesToAnchor,
+      "translateNow('settings.billing.state.changesTo', pending.tierName, pending.when)"
+    );
+    changed = true;
+  }
+
+  // `Cancels on ${pending.when}.`
+  const cancelsOnAnchor = '`Cancels on ${pending.when}.`';
+  if (out.includes(cancelsOnAnchor)) {
+    out = out.replace(
+      cancelsOnAnchor,
+      "translateNow('settings.billing.state.cancelsOn', pending.when)"
+    );
+    changed = true;
+  }
+
+  // `Renews ${renewal}`
+  const renewsAnchor = '`Renews ${renewal}`';
+  if (out.includes(renewsAnchor)) {
+    out = out.replace(
+      renewsAnchor,
+      "translateNow('settings.billing.state.renews', renewal)"
+    );
+    changed = true;
+  }
+
+  // `Auto-refill charges ${cardLabel} — reconcile on the portal`
+  const arRecAnchor = '`Auto-refill charges ${cardLabel} — reconcile on the portal`';
+  if (out.includes(arRecAnchor)) {
+    out = out.replace(
+      arRecAnchor,
+      "translateNow('settings.billing.state.autoRefillReconcile', cardLabel)"
+    );
+    changed = true;
+  }
+
+  // `Charges ${reloadTo} automatically when your balance falls below ${threshold}.`
+  const arChargesAnchor = '`Charges ${reloadTo} automatically when your balance falls below ${threshold}.`';
+  if (out.includes(arChargesAnchor)) {
+    out = out.replace(
+      arChargesAnchor,
+      "translateNow('settings.billing.state.autoRefillCharges', reloadTo, threshold)"
+    );
+    changed = true;
+  }
+
+  // `Resets ${formatBillingDate(...)}`
+  const resetsAnchor = '`Resets ${formatBillingDate(';
+  if (out.includes(resetsAnchor)) {
+    // Pattern: `Resets ${formatBillingDate(current?.cycle_ends_at ?? usage?.renews_at)}`
+    const match = out.match(/`Resets \$\{formatBillingDate\(([^)]+)\)\}`/);
+    if (match) {
+      out = out.replace(
+        match[0],
+        `translateNow('settings.billing.state.resetsOn', formatBillingDate(${match[1]}))`
+      );
+      changed = true;
+    }
+  }
+
+  // `${formatMoney(spent)} of ${formatMoney(limit)} used`
+  const ofUsedAnchor = '`${';
+  // Look for the specific pattern: `${cap.spent_display || formatMoney(spent)} of ${cap.limit_display || formatMoney(limit)} used`
+  const ofUsedPattern = /\`\$\{[^}]+\} of \$\{[^}]+\} used\`/;
+  const ofUsedMatch = out.match(ofUsedPattern);
+  if (ofUsedMatch && !out.includes("translateNow('settings.billing.state.ofUsed'")) {
+    out = out.replace(
+      ofUsedMatch[0],
+      `translateNow('settings.billing.state.ofUsed', ${ofUsedMatch[0].slice(2, ofUsedMatch[0].indexOf('} of '))}, ${ofUsedMatch[0].slice(ofUsedMatch[0].indexOf('} of ${') + 7, ofUsedMatch[0].lastIndexOf('}'))})`
+    );
+    // More robust: just replace the four known patterns
+  }
+
+  // `Enabled` / `Off` pill labels
+  const pillEnabledAnchor = "label: 'Enabled'";
+  if (out.includes(pillEnabledAnchor) && !out.includes("translateNow('settings.billing.state.enabled')")) {
+    out = out.replace(
+      /label: 'Enabled'/g,
+      "label: translateNow('settings.billing.state.enabled')"
+    );
+    changed = true;
+  }
+
+  const pillOffAnchor = "label: 'Off'";
+  if (out.includes(pillOffAnchor) && !out.includes("translateNow('settings.billing.state.off')")) {
+    out = out.replace(
+      /label: 'Off'(?![\w])/g,
+      "label: translateNow('settings.billing.state.off')"
+    );
+    changed = true;
+  }
+
+  // provenanceSuffix labels
+  const provLabels = {
+    "'auto-refill card'": "translateNow('settings.billing.state.autoRefillCard')",
+    "'customer default'": "translateNow('settings.billing.state.customerDefault')",
+    "'subscription card'": "translateNow('settings.billing.state.subscriptionCard')",
+  };
+  for (const [eng, key] of Object.entries(provLabels)) {
+    if (out.includes(eng) && !out.includes(key)) {
+      out = out.replace(eng, key);
+      changed = true;
+    }
+  }
+
+  return { content: out, changed };
+}
+
+// ---------------------------------------------------------------------------
+// ПАТЧ 8: billing/errors.ts — баннеры ошибок
+// ---------------------------------------------------------------------------
+
+function patchErrors(content) {
+  if (/translateNow\(['"]settings\.billing\.errors\./.test(content)) {
+    return { content, changed: false };
+  }
+
+  let changed = false;
+  let out = content;
+
+  // 0. Добавляем импорт translateNow
+  if (!out.includes("import { translateNow }")) {
+    const importAnchor = "import type { BillingRefusal } from './api'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('billing/errors.ts', 'BillingRefusal import');
+    }
+    out = out.replace(
+      importAnchor,
+      "import type { BillingRefusal } from './api'\nimport { translateNow } from '@/i18n'"
+    );
+    changed = true;
+  }
+
+  // Патчим title/message строки в resolveRefusal
+  const replacements = [
+    // consent_required
+    ["'Confirm this card for terminal charges in the portal'",
+      "translateNow('settings.billing.errors.cardConfirmationMessage')"],
+    ["'Card confirmation needed'",
+      "translateNow('settings.billing.errors.cardConfirmationNeeded')"],
+    // insufficient_scope
+    ["'This needs Remote Spending allowed. Start a top-up to allow it, then retry.'",
+      "translateNow('settings.billing.errors.remoteSpendingMessage')"],
+    ["'Remote Spending needs approval'",
+      "translateNow('settings.billing.errors.remoteSpendingNeedsApproval')"],
+    // remote_spending_revoked
+    ["'An admin stopped remote spending for this terminal.'",
+      "translateNow('settings.billing.errors.adminStopped')"],
+    ["'You stopped remote spending for this terminal.'",
+      "translateNow('settings.billing.errors.youStopped')"],
+    // `... Reconnect from Settings → Gateway...`
+    ["`${who} Reconnect from Settings → Gateway to re-authorize this device.`",
+      "translateNow('settings.billing.errors.remoteSpendingReconnect', who)"],
+    ["'Remote spending was stopped'",
+      "translateNow('settings.billing.errors.remoteSpendingStopped')"],
+    // session_revoked
+    ["'Your session was logged out. Sign in again from Settings → Gateway.'",
+      "translateNow('settings.billing.errors.sessionLoggedOutMessage')"],
+    ["'Session logged out'",
+      "translateNow('settings.billing.errors.sessionLoggedOut')"],
+    // remote_spending_disabled / cli_billing_disabled
+    [`"Remote spending is off for this account — a billing admin can turn it on from the portal's Hermes Agent page."`,
+      "translateNow('settings.billing.errors.remoteSpendingOffMessage')"],
+    ["'Remote spending is off'",
+      "translateNow('settings.billing.errors.remoteSpendingOff')"],
+    // role_required
+    ["'Adding funds needs an org admin/owner. Ask an admin, or manage on the portal.'",
+      "translateNow('settings.billing.errors.adminRoleRequiredMessage')"],
+    ["'Admin role required'",
+      "translateNow('settings.billing.errors.adminRoleRequired')"],
+    // idempotency_conflict
+    ["'🔴 That charge key was already used for a different amount. Start a fresh top-up.'",
+      "translateNow('settings.billing.errors.idempotencyConflictMessage')"],
+    ["'Start a fresh top-up'",
+      "translateNow('settings.billing.errors.startFreshTopUp')"],
+    // no_payment_method
+    [`'💳 No saved card for terminal charges yet. Set one up on the portal ' +\n          \"(one-time credit buys don't save a reusable card).\"`,
+      "translateNow('settings.billing.errors.noSavedCardMessage')"],
+    ["'No saved card'",
+      "translateNow('settings.billing.errors.noSavedCard')"],
+    // org_access_denied
+    [`\"This token isn't bound to an org you can manage\"`,
+      "translateNow('settings.billing.errors.orgAccessDeniedMessage')"],
+    ["'Org access denied'",
+      "translateNow('settings.billing.errors.orgAccessDenied')"],
+    // monthly_cap_exceeded
+    ["'Monthly spend cap reached'",
+      "translateNow('settings.billing.errors.monthlyCapExceeded')"],
+    // rate_limited / temporarily_unavailable
+    ["'Too many charges right now'",
+      "translateNow('settings.billing.errors.tooManyCharges')"],
+    // stripe_unavailable
+    ["'Stripe is having trouble'",
+      "translateNow('settings.billing.errors.stripeTrouble')"],
+    // upgrade_cap_exceeded
+    ["'Daily plan-change limit reached — try again tomorrow'",
+      "translateNow('settings.billing.errors.dailyPlanChangeLimitMessage')"],
+    ["'Daily plan-change limit reached'",
+      "translateNow('settings.billing.errors.dailyPlanChangeLimit')"],
+    // endpoint_unavailable
+    [`'Billing endpoint returned a non-JSON response (it may not be available on this deployment).'`,
+      "translateNow('settings.billing.errors.endpointUnavailableMessage')"],
+    ["'Billing endpoint unavailable'",
+      "translateNow('settings.billing.errors.endpointUnavailable')"],
+    // timeout
+    ["'Billing request timed out'",
+      "translateNow('settings.billing.errors.requestTimedOut')"],
+    ["'Billing request timed out.'",
+      "translateNow('settings.billing.errors.requestTimedOutMessage')"],
+    // transport
+    ["'Billing connection failed'",
+      "translateNow('settings.billing.errors.connectionFailed')"],
+    ["'Billing request failed before reaching the gateway.'",
+      "translateNow('settings.billing.errors.connectionFailedMessage')"],
+    // default
+    ["'Billing request failed'",
+      "translateNow('settings.billing.errors.requestFailed')"],
+    ["'Billing request failed.'",
+      "translateNow('settings.billing.errors.requestFailedMessage')"],
+  ];
+
+  for (const [eng, replacement] of replacements) {
+    if (out.includes(eng) && !out.includes(replacement)) {
+      out = out.replace(eng, replacement);
+      changed = true;
+    }
+  }
+
+  // Special: dynamic message patterns
+  // `🟡 Too many charges right now${mins}. This isn't a payment failure.`
+  const rateLimitedPattern = '`🟡 Too many charges right now${mins}. This isn\'t a payment failure.`';
+  if (out.includes('🟡 Too many charges right now${mins}')) {
+    out = out.replace(
+      /`🟡 Too many charges right now\$\{mins\}\. This isn't a payment failure\.`/,
+      "translateNow('settings.billing.errors.rateLimitedMessage', mins)"
+    );
+    changed = true;
+  }
+
+  // `Stripe is having trouble — try again shortly${mins}`
+  if (out.includes('Stripe is having trouble — try again shortly${mins}')) {
+    out = out.replace(
+      /`Stripe is having trouble — try again shortly\$\{mins\}`/,
+      "translateNow('settings.billing.errors.stripeRetryMessage', mins)"
+    );
+    changed = true;
+  }
+
+  // `🔴 Monthly spend cap reached — $${remaining} headroom left.`
+  if (out.includes('Monthly spend cap reached — $${remaining}')) {
+    out = out.replace(
+      /`🔴 Monthly spend cap reached — \$\$\{remaining\} headroom left\.`/,
+      "translateNow('settings.billing.errors.monthlyCapExceededWithRemaining', remaining)"
+    );
+    changed = true;
+  }
+
+  // '🔴 Monthly spend cap reached.' (without remaining)
+  if (out.includes("'🔴 Monthly spend cap reached.'") && !out.includes("translateNow('settings.billing.errors.monthlyCapExceededSimple')")) {
+    out = out.replace(
+      "'🔴 Monthly spend cap reached.'",
+      "translateNow('settings.billing.errors.monthlyCapExceededSimple')"
+    );
+    changed = true;
+  }
+
+  return { content: out, changed };
+}
+
+// ---------------------------------------------------------------------------
+// ПАТЧ 9: расширение en.ts — вставка state/errors в существующую секцию billing
+// ---------------------------------------------------------------------------
+
+function extendEnTsBilling(content) {
+  // Проверяем, есть ли уже state/errors
+  if (/\s+state:\s*\{/.test(content) && /\s+errors:\s*\{/.test(content)) {
+    return { content, changed: false };
+  }
+
+  let changed = false;
+  let out = content;
+
+  // Находим секцию billing внутри settings
+  // Ищем закрытие billing блока (после 'billing: {')
+  const billingStart = out.search(/\n\s{4,}billing:\s*\{/);
+  if (billingStart < 0) {
+    throw new PatchAnchorError('en.ts (extend)', 'billing: { inside settings');
+  }
+
+  // Парсим глубину для поиска закрывающей }
+  let depth = 0;
+  let billingEnd = -1;
+  let j = out.indexOf('{', billingStart);
+  for (; j < out.length; j++) {
+    if (out[j] === '{') depth++;
+    else if (out[j] === '}') {
+      depth--;
+      if (depth === 0) { billingEnd = j; break; }
+    }
+  }
+
+  if (billingEnd < 0) {
+    throw new PatchAnchorError('en.ts (extend)', 'closing } of billing block');
+  }
+
+  // Блоки state и errors для вставки перед закрывающей } billing
+  const stateBlock = `,
+    state: {
+      openPortal: 'Open portal ↗',
+      openPortalShort: 'Open portal',
+      connectMessage:
+        'Run /portal in the TUI or open the Nous portal to connect your account.',
+      connectTitle: 'Connect your Nous account',
+      addCard: 'Add card ↗',
+      noPaymentMethod: 'No payment method on file',
+      noCardMessage:
+        'Buying top-up credits and auto-refill stay disabled until a card is on file. Add one on the portal.',
+      addPaymentMethod: 'Add payment method',
+      paymentMethod: 'Payment method',
+      update: 'Update',
+      manageCardDesc:
+        'Manage the card used for top-ups and subscription renewals.',
+      buy: 'Buy',
+      buyCreditsDesc:
+        'A single charge on your card, added to your balance today.',
+      buyCreditsNow: 'Buy credits now',
+      autoRefillGeneric:
+        'Keep your balance topped up when it drops below your threshold.',
+      manage: 'Manage',
+      manageAutoRefillCaption: 'Manage auto-refill from the portal.',
+      refillWhenLow: 'Refill when low',
+      turnOnAutoRefillCaption: 'Turn on auto-refill from the portal',
+      reconcile: 'Reconcile ↗',
+      autoRefillCard: 'auto-refill card',
+      customerDefault: 'customer default',
+      subscriptionCard: 'subscription card',
+      subscriptionCreditsRemaining: 'Subscription credits remaining',
+      subscriptionCredits: 'Subscription credits',
+      doesNotExpire: 'Does not expire',
+      topUpCredits: 'Top-up credits',
+      monthlySpendCapUsed: 'Monthly spend cap used',
+      monthlySpendCap: 'Monthly spend cap',
+      defaultCeiling: 'Default ceiling',
+      monthlyRemoteSpending: 'Monthly remote spending',
+      changePlan: 'Change plan',
+      viewPlans: 'View plans',
+      adjustPlan: 'Adjust plan ↗',
+      choose: 'Choose ↗',
+      enabled: 'Enabled',
+      off: 'Off',
+      subscriptionUnavailable:
+        'Subscription details are unavailable; opening the portal is still available.',
+      noActiveSubscription:
+        'No active subscription — paid models draw down top-up credits.',
+      changesTo: (tierName: string, when: string) => \`Changes to \${tierName} on \${when}.\`,
+      cancelsOn: (when: string) => \`Cancels on \${when}.\`,
+      renews: (renewal: string) => \`Renews \${renewal}\`,
+      autoRefillReconcile: (cardLabel: string) =>
+        \`Auto-refill charges \${cardLabel} — reconcile on the portal\`,
+      autoRefillCharges: (reloadTo: string, threshold: string) =>
+        \`Charges \${reloadTo} automatically when your balance falls below \${threshold}.\`,
+      resetsOn: (date: string) => \`Resets \${date}\`,
+      ofUsed: (spent: string, limit: string) => \`\${spent} of \${limit} used\`,
+      remoteSpendingReconnect: (who: string) =>
+        \`\${who} Reconnect from Settings → Gateway to re-authorize this device.\`,
+    }`;
+
+  const errorsBlock = `,
+    errors: {
+      cardConfirmationNeeded: 'Card confirmation needed',
+      cardConfirmationMessage:
+        'Confirm this card for terminal charges in the portal',
+      remoteSpendingNeedsApproval: 'Remote Spending needs approval',
+      remoteSpendingMessage:
+        'This needs Remote Spending allowed. Start a top-up to allow it, then retry.',
+      remoteSpendingStopped: 'Remote spending was stopped',
+      adminStopped: 'An admin stopped remote spending for this terminal.',
+      youStopped: 'You stopped remote spending for this terminal.',
+      sessionLoggedOut: 'Session logged out',
+      sessionLoggedOutMessage:
+        'Your session was logged out. Sign in again from Settings → Gateway.',
+      remoteSpendingOff: 'Remote spending is off',
+      remoteSpendingOffMessage:
+        "Remote spending is off for this account — a billing admin can turn it on from the portal's Hermes Agent page.",
+      adminRoleRequired: 'Admin role required',
+      adminRoleRequiredMessage:
+        'Adding funds needs an org admin/owner. Ask an admin, or manage on the portal.',
+      startFreshTopUp: 'Start a fresh top-up',
+      idempotencyConflictMessage:
+        '🔴 That charge key was already used for a different amount. Start a fresh top-up.',
+      noSavedCard: 'No saved card',
+      noSavedCardMessage:
+        '💳 No saved card for terminal charges yet. Set one up on the portal (one-time credit buys don\\'t save a reusable card).',
+      orgAccessDenied: 'Org access denied',
+      orgAccessDeniedMessage: "This token isn't bound to an org you can manage",
+      monthlyCapExceeded: 'Monthly spend cap reached',
+      monthlyCapExceededWithRemaining: (remaining: number) =>
+        \`🔴 Monthly spend cap reached — \$\${remaining} headroom left.\`,
+      monthlyCapExceededSimple: '🔴 Monthly spend cap reached.',
+      tooManyCharges: 'Too many charges right now',
+      rateLimitedMessage: (mins: string) =>
+        \`🟡 Too many charges right now\${mins}. This isn't a payment failure.\`,
+      stripeTrouble: 'Stripe is having trouble',
+      stripeRetryMessage: (mins: string) =>
+        \`Stripe is having trouble — try again shortly\${mins}\`,
+      dailyPlanChangeLimit: 'Daily plan-change limit reached',
+      dailyPlanChangeLimitMessage:
+        'Daily plan-change limit reached — try again tomorrow',
+      endpointUnavailable: 'Billing endpoint unavailable',
+      endpointUnavailableMessage:
+        'Billing endpoint returned a non-JSON response (it may not be available on this deployment).',
+      requestTimedOut: 'Billing request timed out',
+      requestTimedOutMessage: 'Billing request timed out.',
+      connectionFailed: 'Billing connection failed',
+      connectionFailedMessage:
+        'Billing request failed before reaching the gateway.',
+      requestFailed: 'Billing request failed',
+      requestFailedMessage: 'Billing request failed.',
+    }`;
+
+  // Вставляем оба блока перед закрывающей } billing
+  out =
+    out.slice(0, billingEnd) +
+    stateBlock +
+    errorsBlock +
+    out.slice(billingEnd);
+
+  changed = true;
+  return { content: out, changed };
+}
+
+// ---------------------------------------------------------------------------
+// ПАТЧ 7→10: Добавление новых ключей в en.ts (оригинальный patchEnTs)
 // ---------------------------------------------------------------------------
 
 function patchEnTs(content) {
@@ -1158,6 +2051,8 @@ const COMPONENT_FILES = {
   'billing/plans-view.tsx': patchPlansView,
   'billing/auto-reload-row.tsx': patchAutoReloadRow,
   'billing/current-plan-card.tsx': patchCurrentPlanCard,
+  'billing/use-billing-state.ts': patchUseBillingState,
+  'billing/errors.ts': patchErrors,
 };
 
 /**
@@ -1190,11 +2085,14 @@ function applyComponentPatches(desktopDir) {
   if (fs.existsSync(enPath)) {
     const enRaw = fs.readFileSync(enPath);
     const enEol = detectEol(enRaw.toString('utf8'));
+    // Сначала базовый патч (moa/billing/customEndpoints — из v1.1.0)
     const enR = patchEnTs(toUnix(enRaw.toString('utf8')));
-    if (enR.changed) {
+    // Затем расширение (state/errors — из v1.1.1)
+    const enR2 = extendEnTsBilling(enR.content);
+    if (enR.changed || enR2.changed) {
       originals['en.ts'] = enRaw;
       eols['en.ts'] = enEol;
-      patched['en.ts'] = enR.content;
+      patched['en.ts'] = enR2.changed ? enR2.content : enR.content;
       changed.push('en.ts');
     }
   }
@@ -1244,6 +2142,9 @@ module.exports = {
   COMPONENT_FILES,
   applyComponentPatches,
   removeComponentPatches,
+  patchUseBillingState,
+  patchErrors,
+  extendEnTsBilling,
   _internals: {
     patchModelSettingsMoA,
     patchCustomEndpoints,
@@ -1251,6 +2152,9 @@ module.exports = {
     patchPlansView,
     patchAutoReloadRow,
     patchCurrentPlanCard,
+    patchUseBillingState,
+    patchErrors,
+    extendEnTsBilling,
     patchEnTs,
   },
 };
