@@ -49,6 +49,7 @@ function makeDesktop(t, { locales, eol = '\n', writeRu = false, corrupt = null }
   const i18n = path.join(desktop, 'src', 'i18n');
   fs.mkdirSync(i18n, { recursive: true });
   fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+  fs.writeFileSync(path.join(desktop, 'hermes-version.json'), JSON.stringify({ cliVersion: '0.19.0' }));
   const files = {
     'types.ts': typesFile(locales),
     'catalog.ts': catalogFile(locales),
@@ -376,6 +377,7 @@ function makeComponentsDesktop(t, { eol = '\\n', patches = true } = {}) {
   fs.mkdirSync(billing, { recursive: true });
   fs.mkdirSync(i18n, { recursive: true });
   fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+  fs.writeFileSync(path.join(desktop, 'hermes-version.json'), JSON.stringify({ cliVersion: '0.19.0' }));
 
   // i18n-файлы (нужны для findDesktopDir)
   fs.writeFileSync(path.join(i18n, 'types.ts'), "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'\nexport type Translations = { common: { apply: string } }\n");
@@ -481,6 +483,7 @@ test('F11b: components-patch — все 6 компонентов + en.ts пат�
   fs.mkdirSync(billing, { recursive: true });
   fs.mkdirSync(i18n, { recursive: true });
   fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+  fs.writeFileSync(path.join(desktop, 'hermes-version.json'), JSON.stringify({ cliVersion: '0.19.0' }));
 
   const wr = (rel, content) => {
     let targetPath;
@@ -523,6 +526,7 @@ test('F11c: components-patch — битый якорь в model-settings.tsx →
   fs.mkdirSync(billing, { recursive: true });
   fs.mkdirSync(i18n, { recursive: true });
   fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+  fs.writeFileSync(path.join(desktop, 'hermes-version.json'), JSON.stringify({ cliVersion: '0.19.0' }));
 
   // Повреждённая фикстура: убран якорь title="Mixture of Agents"
   const brokenMoa = MOA_FIXTURE.replace('title="Mixture of Agents"', 'title="Something Else"');
@@ -765,6 +769,7 @@ test('F12: components-patch — use-billing-state.ts + errors.ts apply → verif
   fs.mkdirSync(billing, { recursive: true });
   fs.mkdirSync(i18n, { recursive: true });
   fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+  fs.writeFileSync(path.join(desktop, 'hermes-version.json'), JSON.stringify({ cliVersion: '0.19.0' }));
 
   fs.writeFileSync(path.join(billing, 'use-billing-state.ts'), USE_BILLING_STATE_FIXTURE);
   fs.writeFileSync(path.join(billing, 'errors.ts'), ERRORS_FIXTURE);

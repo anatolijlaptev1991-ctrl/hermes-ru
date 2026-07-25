@@ -435,6 +435,12 @@ function newestBackup(desktopDir) {
 // ---------------------------------------------------------------------------
 
 function isVersion019(desktopDir) {
+  // Явный маркер версии в дереве (фикстуры тестов; иначе шаг 5 applyPatch
+  // в тестах молча пропускался бы — слепая зона, нашедшая ReferenceError v1.1.2)
+  try {
+    const marker = JSON.parse(fs.readFileSync(path.join(desktopDir, 'hermes-version.json'), 'utf8'));
+    if (marker.cliVersion) return marker.cliVersion === '0.19.0';
+  } catch { /* нет маркера — штатный путь */ }
   const info = detectHermes(desktopDir);
   return info.cliVersion === '0.19.0';
 }
@@ -506,6 +512,7 @@ function applyPatch(desktopDir, { ruTsSource } = {}) {
   }
 
   // 5. Components-patch (i18n-проводка MoA/billing/custom-endpoints) — только для 0.19.0
+  let componentChanged = [];
   if (isVersion019(desktopDir)) {
     const settingsDir = path.join(desktopDir, 'src', 'app', 'settings');
     const componentFilesExist =
@@ -517,7 +524,7 @@ function applyPatch(desktopDir, { ruTsSource } = {}) {
         const cp = require('./components-patch');
         const cpResult = cp.applyComponentPatches(desktopDir);
         if (cpResult.changed.length > 0) {
-          changed.push(...cpResult.changed.filter(f => !changed.includes(f)));
+          componentChanged = cpResult.changed;
         }
       } catch (e) {
         restoreFromBackup(backupDir);
@@ -526,7 +533,11 @@ function applyPatch(desktopDir, { ruTsSource } = {}) {
     }
   }
 
-  return { changed: [...I18N_FILES, 'ru.ts'], backupDir, already: false };
+  const allChanged = [...I18N_FILES, 'ru.ts'];
+  for (const f of componentChanged) {
+    if (!allChanged.includes(f)) allChanged.push(f);
+  }
+  return { changed: allChanged, backupDir, already: false };
 }
 
 function removePatch(desktopDir, { allowGitFallback = true } = {}) {
