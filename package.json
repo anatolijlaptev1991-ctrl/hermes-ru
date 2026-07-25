@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru",
   "scripts": {
-    "test": "node --test tests/*.js",
+    "test": "node --test tests/check_patch_engine.js tests/check_translation_contract.js",
     "test:contract": "node --test tests/check_translation_contract.js"
   },
   "bin": {
