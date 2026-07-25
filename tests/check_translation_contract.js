@@ -93,7 +93,10 @@ function extractKeyPathsPrecise(source, loadImport = null, _depth = 0, outValues
     }
   };
 
-  /** Прочитать quoted-строку как токен (для ключей 'with-dash'). */
+  /** Прочитать quoted-строку как токен (для ключей 'with-dash').
+   *  Точки внутри quoted-ключа (напр. 'keybinds.openPanel') — это ЧАСТЬ ИМЕНИ,
+   *  а не вложенность: кодируем их сентинелом \u0001, чтобы сплит путей по '.'
+   *  не разрывал такой ключ (иначе tsc: object vs string). */
   const readQuoted = () => {
     const q = source[i];
     i++;
@@ -103,7 +106,7 @@ function extractKeyPathsPrecise(source, loadImport = null, _depth = 0, outValues
       s += source[i]; i++;
     }
     i++;
-    return s;
+    return s.replace(/\./g, '\u0001');
   };
 
   /** Пропустить значение-выражение целиком от позиции `start`:

@@ -92,11 +92,17 @@ for (const keyPath of order) {
     snippet = ruOld[keyPath];
     used.add(keyPath);
   }
+  // Ключи с \u0001 (quoted dot-keys, напр. keybinds.actions.'keybinds\u0001openPanel'):
+  // в старом ru они жили как вложенные (keybinds.actions.keybinds.openPanel) — пробуем и эту форму.
+  if (snippet === undefined && keyPath.includes('\u0001')) {
+    const alt = keyPath.replace(/\u0001/g, '.');
+    if (ruOld[alt] !== undefined) { snippet = ruOld[alt]; used.add(alt); }
+  }
   if (snippet === undefined) {
     dropped.push(keyPath); // не должно случиться: missing 365 = |v100|
     continue;
   }
-  const parts = keyPath.split('.');
+  const parts = keyPath.split('.').map(s => s.replace(/\u0001/g, '.'));
   let node = root;
   for (let d = 0; d < parts.length - 1; d++) {
     node = node[parts[d]] = node[parts[d]] || {};

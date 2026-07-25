@@ -147,15 +147,23 @@ function patchCatalogContent(content) {
   let changed = false;
   let out = content;
 
-  // 1. import { ru } from './ru' — после последнего locale-import вида `import { x } from './y'`
+  // 1. import { ru } from './ru' — в алфавитной позиции среди locale-imports
+  //    (perfectionist/sort-imports: './ru' после './ja', до './zh'/'./zh-hant';
+  //    если большего пути нет — после последнего).
   if (!/from\s*'\.\/ru'/.test(out)) {
-    const importRe = /^import\s*\{\s*\w+\s*\}\s*from\s*'\.\/[\w-]+'\s*;?\s*$/gm;
-    let last = null;
+    const importRe = /^import\s+(?:type\s+)?\{\s*[\w,\s]*\w\s*\}\s*from\s*'(\.\/[\w-]+)'\s*;?\s*$/gm;
+    const imports = [];
     let m;
-    while ((m = importRe.exec(out)) !== null) last = m;
-    if (!last) throw new PatchAnchorError('catalog.ts', "import { … } from './<locale>'");
-    const insertAt = last.index + last[0].length;
-    out = out.slice(0, insertAt) + "\nimport { ru } from './ru'" + out.slice(insertAt);
+    while ((m = importRe.exec(out)) !== null) imports.push({ index: m.index, text: m[0], p: m[1] });
+    if (!imports.length) throw new PatchAnchorError('catalog.ts', "import { … } from './<locale>'");
+    const greater = imports.find(im => im.p > './ru');
+    if (greater) {
+      out = out.slice(0, greater.index) + "import { ru } from './ru'\n" + out.slice(greater.index);
+    } else {
+      const last = imports[imports.length - 1];
+      const insertAt = last.index + last.text.length;
+      out = out.slice(0, insertAt) + "\nimport { ru } from './ru'" + out.slice(insertAt);
+    }
     changed = true;
   }
 
@@ -195,7 +203,7 @@ function patchLanguagesContent(content) {
     if (aStart < 0) throw new PatchAnchorError('languages.ts', 'LOCALE_ALIASES … {');
     const aEnd = out.indexOf('\n}', aStart);
     if (aEnd < 0) throw new PatchAnchorError('languages.ts', 'закрывающая } LOCALE_ALIASES');
-    const aliases = "  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru',\n  русский: 'ru',\n  'русский': 'ru'";
+    const aliases = "  ru: 'ru',\n  'ru-ru': 'ru',\n  ru_ru: 'ru',\n  'русский': 'ru'";
     out = insertBeforeClose(out, aEnd, aliases, 'languages.ts', 'тело LOCALE_ALIASES');
     changed = true;
   }
