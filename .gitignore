@@ -11,3 +11,4 @@ dist/
 config/
 # npm pack build artifact (not in repo)
 hermes-ru-*.tgz
+analysis-*

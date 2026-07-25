@@ -1,7 +1,7 @@
 {
   "name": "@anatolijlaptev1991/hermes-ru",
-  "version": "0.22.6",
-  "description": "Русская локализация Hermes Agent Desktop для Windows. defineLocale + build.",
+  "version": "1.0.0",
+  "description": "Русская локализация Hermes Agent Desktop (Windows). Структурный патч i18n, живёт в штатном цикле обновлений Hermes — без launcher'ов и отдельных ярлыков.",
   "license": "MIT",
   "author": "Anatolij Laptev",
   "repository": {
@@ -10,16 +10,15 @@
   },
   "homepage": "https://github.com/anatolijlaptev1991-ctrl/hermes-ru",
   "scripts": {
-    "test": "node --test тесты/*.js",
-    "test:contracts": "node --test тесты/проверка_контрактов_локализации.js"
+    "test": "node --test tests/*.js",
+    "test:contract": "node --test tests/check_translation_contract.js"
   },
   "bin": {
     "hermes-ru": "bin/cli.js"
   },
   "files": [
     "bin/",
-    "launcher/",
-    "assets/hermes-ru-icon.ico",
+    "src/patch-engine.js",
     "src/i18n/ru.ts",
     "compat.json",
     "CHANGELOG.md",
