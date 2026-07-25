@@ -430,6 +430,19 @@ function newestBackup(desktopDir) {
 // applyPatch / removePatch — транзакции
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Version gate для components-patch (только 0.19.0)
+// ---------------------------------------------------------------------------
+
+function isVersion019(desktopDir) {
+  const info = detectHermes(desktopDir);
+  return info.cliVersion === '0.19.0';
+}
+
+// ---------------------------------------------------------------------------
+// applyPatch / removePatch — транзакции
+// ---------------------------------------------------------------------------
+
 function applyPatch(desktopDir, { ruTsSource } = {}) {
   const dir = i18nDir(desktopDir);
   for (const f of I18N_FILES) {
@@ -491,6 +504,28 @@ function applyPatch(desktopDir, { ruTsSource } = {}) {
     restoreFromBackup(backupDir);
     throw new Error('Верификация после записи не пройдена (откат выполнен): ' + v.problems.join('; '));
   }
+
+  // 5. Components-patch (i18n-проводка MoA/billing/custom-endpoints) — только для 0.19.0
+  if (isVersion019(desktopDir)) {
+    const settingsDir = path.join(desktopDir, 'src', 'app', 'settings');
+    const componentFilesExist =
+      fs.existsSync(path.join(settingsDir, 'model-settings.tsx')) &&
+      fs.existsSync(path.join(settingsDir, 'custom-endpoints-settings.tsx')) &&
+      fs.existsSync(path.join(settingsDir, 'billing', 'index.tsx'));
+    if (componentFilesExist) {
+      try {
+        const cp = require('./components-patch');
+        const cpResult = cp.applyComponentPatches(desktopDir);
+        if (cpResult.changed.length > 0) {
+          changed.push(...cpResult.changed.filter(f => !changed.includes(f)));
+        }
+      } catch (e) {
+        restoreFromBackup(backupDir);
+        throw new Error('Components-patch не удался (откат выполнен): ' + e.message);
+      }
+    }
+  }
+
   return { changed: [...I18N_FILES, 'ru.ts'], backupDir, already: false };
 }
 
@@ -692,5 +727,6 @@ module.exports = {
   runtimeDistDir,
   findElectronExe,
   migrateLegacyDataDir,
+  isVersion019,
   _internals: { PATCHERS, UNPATCHERS, detectEol, toUnix, fromUnix, insertBeforeClose, parseTasklistCsv },
 };

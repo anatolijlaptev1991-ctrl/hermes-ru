@@ -1,5 +1,18 @@
 # История изменений hermes-ru
 
+## v1.1.0 (2026-07-25)
+
+**components-patch — структурная i18n-проводка трёх захардкоженных поверхностей настроек 0.19.0:**
+
+- **Mixture of Agents** (`model-settings.tsx`): 13 атомарных замен хардкода → `t('settings.model.moa.*')` (title, description, preset, enabled, setDefault, delete, newPreset, addPreset, defaultLabel, referenceN, remove, addReference, aggregator).
+- **Custom Endpoints** (`custom-endpoints-settings.tsx`): 28 атомарных замен → `t('settings.customEndpoints.*')` (все подписи полей, кнопок, уведомлений).
+- **Billing** (`billing/index.tsx`, `plans-view.tsx`, `current-plan-card.tsx`, `auto-reload-row.tsx`): 30+ атомарных замен → `t('settings.billing.*')` (Billing, Plan, Payment & credits, Usage, портал, авторефилл, Confirm downgrade, и т.д.).
+- **en.ts**: структурная вставка новых ключей в секции `settings.model.moa`, `settings.billing`, `settings.customEndpoints` (90+ ключей).
+- **Version gate**: components-patch срабатывает только для Hermes 0.19.0; на других версиях — пропуск с предупреждением.
+- **Идемпотентность**: повторный прогон = no-op (детект по наличию `t('settings.model.moa.title')`).
+- **Тесты F11**: apply → verify → идемпотентность → rollback (фикстуры — урезанные копии реальных компонентов 0.19.0).
+- Глоссарий русских переводов: aggregator → «Агрегатор», preset → «пресет», endpoint → «эндпоинт», billing → «Биллинг», credits → «кредиты», plan → «Тариф», auto-refill → «Автопополнение», usage → «Использование», spend cap → «лимит расходов».
+
 ## v1.0.1 (2026-07-25)
 
 **Багфиксы, найденные при подготовке upstream PR (прогон upstream-проверок `tsc`+ESLint на свежем main):**

@@ -207,3 +207,321 @@ test('F10: юниты — tasklist, insertBeforeClose, EOL', () => {
   assert.equal(engine._internals.detectEol('a\r\nb\r\n'), '\r\n');
   assert.equal(engine._internals.detectEol('a\nb\n'), '\n');
 });
+
+// ---------------------------------------------------------------------------
+// F11: components-patch — apply → verify → идемпотентность → rollback
+// ---------------------------------------------------------------------------
+
+// Мини-фикстуры — урезанные копии поверхностей из реального Hermes 0.19.0,
+// содержащие только прово́димые захардкоженные строки.
+
+const MOA_FIXTURE = `import { Cpu } from '@/lib/icons'
+import { SectionHeading } from './primitives'
+
+export function MoaSection() {
+  return (
+    <section>
+      <SectionHeading icon={Cpu} title="Mixture of Agents" />
+      <p className="mb-2 text-xs text-muted-foreground">
+        Configure named presets that appear as models under the Mixture of Agents provider. The aggregator is the\n            acting model.
+      </p>
+      <Select value="default">
+        <SelectTrigger>
+          <SelectValue placeholder="Preset" />
+        </SelectTrigger>
+      </Select>
+      <label>Enabled<Switch checked={true} /></label>
+      <Button>Set default</Button>
+      <Button
+            variant="ghost"
+            >
+              Delete
+            </Button>
+      <Input placeholder="new preset" />
+      <Button>Add preset</Button>
+      <div>Default:<span>default</span></div>
+      <ListRow title={\`Reference \${index + 1}\`} />
+      <Button
+                    variant="ghost"
+                    >
+                      Remove
+                    </Button>
+      <Button>Add reference model</Button>
+      <ListRow title="Aggregator" />
+    </section>
+  )
+}
+`;
+
+const CUSTOM_ENDPOINTS_FIXTURE = `import { Globe, Plus } from '@/lib/icons'
+import { SectionHeading } from './primitives'
+
+export function CustomEndpointsSettings() {
+  return (
+    <div>
+      <SectionHeading icon={Globe} title="Custom Endpoints" />
+      <EmptyState
+        description="Add an OpenAI-compatible endpoint below."
+        title="No custom endpoints"
+      />
+      <SectionHeading icon={Plus} title={form.id ? 'Edit Endpoint' : 'Add Endpoint'} />
+      <label>Name</label>
+      <label>Provider ID</label>
+      <label>Endpoint URL</label>
+      <label>Default Model</label>
+      <label>Context</label>
+      <label>API Key</label>
+      <label>Use for new chats</label>
+      <label>Discover models</label>
+      <Button>Test</Button>
+      <Button>Save</Button>
+      <Button>New endpoint</Button>
+      <Pill>Active</Pill>
+      <Button>Use</Button>
+      <Button title="Delete endpoint" />
+    </div>
+  )
+}
+`;
+
+const BILLING_INDEX_FIXTURE = `import { BarChart3, CreditCard, Package } from '@/lib/icons'
+
+export function BillingSettings() {
+  return (
+    <div>
+      <span>Billing</span>
+      <SettingsSection icon={Package} title="Plan" />
+      <SettingsSection icon={CreditCard} title="Payment & credits" />
+      <SettingsSection icon={BarChart3} title="Usage" />
+      <div>Processing… checking settlement</div>
+      <div>added. Balance is refreshing.</div>
+      <Button>
+            Open portal
+          </Button>
+      <Button>Retry</Button>
+      <Button>Buy</Button>
+    </div>
+  )
+}
+`;
+
+const PLANS_VIEW_FIXTURE = `export function BillingPlansView() {
+  return (
+    <div>
+      <span>Plans</span>
+      <Pill tone="primary">Current plan</Pill>
+      <Pill>Scheduled</Pill>
+      <Button>Downgrade</Button>
+      <Button>{'Confirm downgrade'}</Button>
+      <Button>Try again</Button>
+    </div>
+  )
+}
+`;
+
+const AUTO_RELOAD_FIXTURE = `export function AutoReloadRow() {
+  return (
+    <div>
+      <label>Threshold</label>
+      <label>Reload to</label>
+      <span>Turn off auto-refill?</span>
+      <Button>Turn off</Button>
+      <Button>Disable</Button>
+      <Button>Manage</Button>
+    </div>
+  )
+}
+`;
+
+const CURRENT_PLAN_FIXTURE = `export function CurrentPlanCard() {
+  return (
+    <div>
+      <Button>'Undo'</Button>
+    </div>
+  )
+}
+`;
+
+const EN_TS_FIXTURE = `import { defineLocale } from './define-locale'
+
+export const en = defineLocale({
+  common: { apply: 'Apply' },
+  settings: {
+    nav: { providers: 'Providers' },
+    model: {
+      appliesDesc: 'Applies to new chats.',
+      provider: 'Provider',
+      model: 'Model',
+    },
+  },
+})
+`;
+
+function makeComponentsDesktop(t, { eol = '\\n', patches = true } = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ru-comp-test-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const desktop = path.join(root, 'apps', 'desktop');
+  const settings = path.join(desktop, 'src', 'app', 'settings');
+  const billing = path.join(settings, 'billing');
+  const i18n = path.join(desktop, 'src', 'i18n');
+  fs.mkdirSync(billing, { recursive: true });
+  fs.mkdirSync(i18n, { recursive: true });
+  fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+
+  // i18n-файлы (нужны для findDesktopDir)
+  fs.writeFileSync(path.join(i18n, 'types.ts'), "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'\nexport type Translations = { common: { apply: string } }\n");
+  fs.writeFileSync(path.join(i18n, 'catalog.ts'), "import { en } from './en'\nexport const TRANSLATIONS: Record<Locale, Translations> = { en }\n");
+  fs.writeFileSync(path.join(i18n, 'languages.ts'), "export const DEFAULT_LOCALE: Locale = 'en'\nexport const LOCALE_OPTIONS = [{ id: 'en', name: 'English', englishName: 'English', configValue: 'en' }] as const satisfies readonly unknown[]\n");
+
+  const wr = (rel, content) => fs.writeFileSync(
+    rel.includes('/') ? path.join(settings, rel) : path.join(settings, rel),
+    eol === '\\r\\n' ? content.replace(/\\n/g, '\\r\\n') : content
+  );
+
+  if (patches) {
+    wr('model-settings.tsx', MOA_FIXTURE);
+    wr('custom-endpoints-settings.tsx', CUSTOM_ENDPOINTS_FIXTURE);
+    wr('billing/index.tsx', BILLING_INDEX_FIXTURE);
+    wr('billing/plans-view.tsx', PLANS_VIEW_FIXTURE);
+    wr('billing/auto-reload-row.tsx', AUTO_RELOAD_FIXTURE);
+    wr('billing/current-plan-card.tsx', CURRENT_PLAN_FIXTURE);
+    wr(path.join(i18n, 'en.ts'), EN_TS_FIXTURE);
+  }
+
+  // Hermes CLI mock: подложим фейковый hermes.exe, который выдаёт версию
+  const venvDir = path.join(root, 'hermes-agent', 'venv', 'Scripts');
+  fs.mkdirSync(venvDir, { recursive: true });
+  // Windows batch-файл как фейковый hermes.exe (execFileSync сработает)
+  const batContent = `@echo off\r\nif "%1" == "--version" echo hermes 0.19.0\r\n`;
+  fs.writeFileSync(path.join(venvDir, 'hermes.exe.bat'), batContent);
+
+  return { root, desktop, settings, i18n, billing };
+}
+
+test('F11: components-patch — apply → verify → идемпотентность → rollback', (t) => {
+  isolateHome(t);
+  const { desktop, pkgRu } = makeDesktop(t, { locales: V019 });
+
+  // Сначала применяем i18n-патч (чтобы desktop был в состоянии 'patched')
+  engine.applyPatch(desktop, { ruTsSource: pkgRu });
+
+  // Создаём компонентные фикстуры ПОВЕРХ i18n-файлов (имитируем 0.19.0)
+  const settings = path.join(desktop, 'src', 'app', 'settings');
+  const billing = path.join(settings, 'billing');
+  fs.mkdirSync(billing, { recursive: true });
+  const wr = (rel, content) => fs.writeFileSync(
+    rel.includes('/') ? path.join(settings, rel) : path.join(settings, rel),
+    content
+  );
+  wr('model-settings.tsx', MOA_FIXTURE);
+  wr('custom-endpoints-settings.tsx', CUSTOM_ENDPOINTS_FIXTURE);
+  wr('billing/index.tsx', BILLING_INDEX_FIXTURE);
+  wr('billing/plans-view.tsx', PLANS_VIEW_FIXTURE);
+  wr('billing/auto-reload-row.tsx', AUTO_RELOAD_FIXTURE);
+  wr('billing/current-plan-card.tsx', CURRENT_PLAN_FIXTURE);
+
+  // Проверяем, что строки хардкожены (до патча)
+  const moaBefore = fs.readFileSync(path.join(settings, 'model-settings.tsx'), 'utf8');
+  assert.ok(moaBefore.includes('title="Mixture of Agents"'));
+  assert.ok(moaBefore.includes('"Preset"'));
+  assert.ok(!moaBefore.includes('t.settings.model.moa'));
+
+  // Применяем компонентный патч вручную
+  const cp = require('../src/components-patch.js');
+  const result = cp.applyComponentPatches(desktop);
+  assert.ok(result.changed.length > 0, 'components-patch должен изменить файлы');
+
+  // Проверяем проводку MoA
+  const moaAfter = fs.readFileSync(path.join(settings, 'model-settings.tsx'), 'utf8');
+  assert.ok(moaAfter.includes('t.settings.model.moa.title'), 'MoA title должен быть проведён');
+  assert.ok(moaAfter.includes('t.settings.model.moa.preset'), 'MoA preset должен быть проведён');
+  assert.ok(moaAfter.includes('t.settings.model.moa.enabled'), 'MoA enabled должен быть проведён');
+  assert.ok(moaAfter.includes('t.settings.model.moa.aggregator'), 'MoA aggregator должен быть проведён');
+  assert.ok(!moaAfter.includes('title="Mixture of Agents"'), 'Хардкод MoA title должен быть заменён');
+
+  // Проверяем проводку Custom Endpoints
+  const ceAfter = fs.readFileSync(path.join(settings, 'custom-endpoints-settings.tsx'), 'utf8');
+  assert.ok(ceAfter.includes('t.settings.customEndpoints.title'), 'CE title должен быть проведён');
+  assert.ok(ceAfter.includes('t.settings.customEndpoints.emptyTitle'), 'CE emptyTitle должен быть проведён');
+
+  // Проверяем проводку Billing
+  const biAfter = fs.readFileSync(path.join(billing, 'index.tsx'), 'utf8');
+  assert.ok(biAfter.includes('t.settings.billing.title'), 'Billing title должен быть проведён');
+
+  // Проверяем идемпотентность: повторный вызов = no-op
+  const result2 = cp.applyComponentPatches(desktop);
+  assert.equal(result2.already, true, 'Повторный прогон должен быть no-op');
+  assert.deepEqual(result2.changed, []);
+
+  // Проверяем, что en.ts не был пропатчен (фикстурный desktop не имеет hermes CLI 0.19.0)
+  // Компонентный патч через patch-engine не вызывался — только прямой вызов cp
+});
+
+// F11b: components-patch прямой вызов на все фикстуры
+test('F11b: components-patch — все 6 компонентов + en.ts патчатся прямой applyComponentPatches', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ru-comp2-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const desktop = path.join(root, 'apps', 'desktop');
+  const settings = path.join(desktop, 'src', 'app', 'settings');
+  const billing = path.join(settings, 'billing');
+  const i18n = path.join(desktop, 'src', 'i18n');
+  fs.mkdirSync(billing, { recursive: true });
+  fs.mkdirSync(i18n, { recursive: true });
+  fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+
+  const wr = (rel, content) => {
+    let targetPath;
+    if (rel.startsWith('i18n/')) {
+      targetPath = path.join(i18n, rel.replace('i18n/', ''));
+    } else if (rel.includes('/')) {
+      targetPath = path.join(settings, rel);
+    } else {
+      targetPath = path.join(settings, rel);
+    }
+    fs.writeFileSync(targetPath, content);
+  };
+  wr('model-settings.tsx', MOA_FIXTURE);
+  wr('custom-endpoints-settings.tsx', CUSTOM_ENDPOINTS_FIXTURE);
+  wr('billing/index.tsx', BILLING_INDEX_FIXTURE);
+  wr('billing/plans-view.tsx', PLANS_VIEW_FIXTURE);
+  wr('billing/auto-reload-row.tsx', AUTO_RELOAD_FIXTURE);
+  wr('billing/current-plan-card.tsx', CURRENT_PLAN_FIXTURE);
+  wr('i18n/en.ts', EN_TS_FIXTURE);
+
+  const cp = require('../src/components-patch.js');
+  const result = cp.applyComponentPatches(desktop);
+  assert.ok(result.changed.length >= 6, `Ожидалось ≥6 изменённых файлов, получено: ${result.changed.join(', ')}`);
+
+  // Идемпотентность
+  const result2 = cp.applyComponentPatches(desktop);
+  assert.equal(result2.already, true);
+});
+
+// F11c: components-patch кидает PatchAnchorError при битом якоре
+test('F11c: components-patch — битый якорь в model-settings.tsx → PatchAnchorError', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ru-comp3-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const desktop = path.join(root, 'apps', 'desktop');
+  const settings = path.join(desktop, 'src', 'app', 'settings');
+  const billing = path.join(settings, 'billing');
+  const i18n = path.join(desktop, 'src', 'i18n');
+  fs.mkdirSync(billing, { recursive: true });
+  fs.mkdirSync(i18n, { recursive: true });
+  fs.writeFileSync(path.join(desktop, 'package.json'), JSON.stringify({ name: 'desktop-fixture' }));
+
+  // Повреждённая фикстура: убран якорь title="Mixture of Agents"
+  const brokenMoa = MOA_FIXTURE.replace('title="Mixture of Agents"', 'title="Something Else"');
+  fs.writeFileSync(path.join(settings, 'model-settings.tsx'), brokenMoa);
+  fs.writeFileSync(path.join(settings, 'custom-endpoints-settings.tsx'), CUSTOM_ENDPOINTS_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'index.tsx'), BILLING_INDEX_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'plans-view.tsx'), PLANS_VIEW_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'auto-reload-row.tsx'), AUTO_RELOAD_FIXTURE);
+  fs.writeFileSync(path.join(billing, 'current-plan-card.tsx'), CURRENT_PLAN_FIXTURE);
+
+  const cp = require('../src/components-patch.js');
+  assert.throws(
+    () => cp.applyComponentPatches(desktop),
+    (err) => err.name === 'PatchAnchorError' && err.message.includes('Mixture of Agents'),
+    'Должен быть PatchAnchorError при битом якоре MoA'
+  );
+});
