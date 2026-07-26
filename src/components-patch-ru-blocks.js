@@ -78,6 +78,9 @@ const billingBlock = `billing: {
       checkingChange: 'Проверка изменения…',
       blockedChange: 'Это изменение невозможно выполнить здесь.',
       alreadyOnPlan: (name: string) => \`Вы уже на тарифе \${name} — менять нечего.\`,
+      effectScheduled: (targetName: string, effectiveAt: string, creditsDelta: string) =>
+        \`Переход на \${targetName} — вступит в силу \${effectiveAt}. Сейчас списания не будет; текущий тариф действует до этой даты.\${creditsDelta ? \` Ежемесячные кредиты изменятся: \${creditsDelta}.\` : ''}\`,
+      notScheduleable: 'Это изменение нельзя запланировать здесь.',
       noPlansAvailable: 'Сейчас нет доступных для смены тарифов.',
       tryAgain: 'Попробовать снова',
       save: 'Сохранить',

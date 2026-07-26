@@ -1,6 +1,6 @@
 {
   "name": "@anatolijlaptev1991/hermes-ru",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Русская локализация Hermes Agent Desktop (Windows). Структурный патч i18n, живёт в штатном цикле обновлений Hermes — без launcher'ов и отдельных ярлыков.",
   "license": "MIT",
   "author": "Anatolij Laptev",
@@ -24,7 +24,9 @@
     "compat.json",
     "CHANGELOG.md",
     "README.md",
-    "src/components-patch-ru-blocks.js"
+    "src/components-patch-ru-blocks.js",
+    "src/components-patch-type-blocks.js",
+    "src/components-patch-zh-blocks.js"
   ],
   "engines": {
     "node": ">=18"

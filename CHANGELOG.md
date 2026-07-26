@@ -1,5 +1,20 @@
 # История изменений hermes-ru
 
+## v1.1.4 (2026-07-26)
+
+**Большой раунд закалки components-patch — всё найдено реальным прогоном install → tsc на живом дереве (гейт, которого не было у суб-агентов):**
+
+- **snapshot/rollback покрывает en.ts + zh.ts + все 8 компонентов** (раньше откат восстанавливал только i18n-тройку + ru.ts — битые компоненты оставались на диске).
+- **i18n-проводка в патчах:** каждый патчимый компонент получает import useI18n/translateNow + хук (раньше литералы заменялись на t.* без объявления — TS2304).
+- **patchTypesTs:** Translations-интерфейс расширяется новыми секциями (TS2339). **patchZhTs:** zh.ts (полный тип) получает ZH-блоки из PR (TS2741).
+- **findBlockEnd строко-безопасен** (скобки внутри строк/шаблонов/комментариев не ломают подсчёт — вставки больше не съезжают).
+- **Двойная запятая** в extendEnTs/extendRuTs (state/errors после trailing comma базового блока); **битый translateNow ofUsed** (slice оставлял фигурную скобку).
+- **Ключи +2:** effectScheduled, notScheduleable (en/ru/zh; previewMessage теперь полностью проведён через translateNow).
+- **Version-gate маркер** hermes-version.json для фикстур: шаг 5 applyPatch покрыт тестами (слепая зона ReferenceError v1.1.2/1.1.3).
+- Генераторы: gen-ru-blocks.js (ru+zh из PR-worktree + ручные словари), gen-type-blocks.js (интерфейсы из песочного en.ts), sandbox-verify.js (прогон против копии реального дерева).
+- **Гейт: npm run typecheck (3 tsconfig) на пропатченном живом дереве — зелёный; 0 английских литералов в 8 компонентах.**
+
+
 ## v1.1.3 (2026-07-26)
 
 - **patch-engine:** ReferenceError `changed is not defined` в шаге 5 applyPatch (components-patch интеграция) — падал реальный install/repair, тесты были слепы (version-gate не срабатывал на фикстурах). Добавлен маркер `hermes-version.json` для фикстур — шаг 5 теперь покрыт тестами.

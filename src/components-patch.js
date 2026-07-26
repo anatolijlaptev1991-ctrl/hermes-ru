@@ -467,6 +467,24 @@ function patchCustomEndpoints(content) {
   let changed = false;
   let out = content;
 
+  // 0. i18n-wiring: import + хук (единственный компонент CustomEndpointsSettings)
+  if (!/from '@\/i18n'/.test(out)) {
+    const importAnchor = "import { Button } from '@/components/ui/button'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('custom-endpoints-settings.tsx', 'import anchor');
+    }
+    out = out.replace(importAnchor, `import { useI18n } from '@/i18n'\n${importAnchor}`);
+    changed = true;
+  }
+  if (!/const \{ t \} = useI18n\(\)/.test(out)) {
+    const sigAnchor = 'export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: CustomEndpointsSettingsProps) {';
+    if (!out.includes(sigAnchor)) {
+      throw new PatchAnchorError('custom-endpoints-settings.tsx', 'component signature');
+    }
+    out = out.replace(sigAnchor, `${sigAnchor}\n  const { t } = useI18n()`);
+    changed = true;
+  }
+
   // 1. 'Custom Endpoints' title
   const ceTitleAnchor = 'title="Custom Endpoints"';
   if (!out.includes(ceTitleAnchor)) {
@@ -679,6 +697,37 @@ function patchBillingIndex(content) {
   let changed = false;
   let out = content;
 
+  // 0. i18n-wiring: import + хук в каждом компоненте, где появится t.*
+  if (!/from '@\/i18n'/.test(out)) {
+    const importAnchor = "import { Button } from '@/components/ui/button'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('billing/index.tsx', 'import anchor');
+    }
+    out = out.replace(importAnchor, `import { useI18n } from '@/i18n'\n${importAnchor}`);
+    changed = true;
+  }
+  const wireHook = (anchor, label) => {
+    const at = out.indexOf(anchor);
+    if (at < 0) throw new PatchAnchorError('billing/index.tsx', label);
+    // Идемпотентность: хук уже есть рядом с якорем
+    if (out.slice(Math.max(0, at - 120), at + anchor.length + 120).includes('useI18n()')) return;
+    out = out.slice(0, at + anchor.length) + `\n  const { t } = useI18n()` + out.slice(at + anchor.length);
+    changed = true;
+  };
+  wireHook(
+    'function BuyCreditsRow({ billing, row }: { billing: BillingStateResponse; row: BillingAccountRowView }) {',
+    'BuyCreditsRow signature'
+  );
+  wireHook('  const stepUp = useStepUpFlow()', 'BuyCreditsOutcome body');
+  wireHook(
+    "onFixtureChange?: (value: BillingFixtureSelection) => void\n}) {",
+    'BillingHeader signature'
+  );
+  wireHook(
+    "  const [subView, setSubView] = useRouteEnumParam<BillingSubView>('bview', BILLING_VIEWS, 'overview')",
+    'BillingSettingsContent body'
+  );
+
   // 1. 'Billing' header text
   out = replaceJsxText(out, 'Billing', '{t.settings.billing.title}', 'billing/index.tsx', 'Billing header');
   changed = true;
@@ -778,6 +827,63 @@ function patchPlansView(content) {
   let changed = false;
   let out = content;
 
+  // 0. i18n-wiring: import (useI18n + translateNow) + хуки в компонентах
+  if (!/from '@\/i18n'/.test(out)) {
+    const importAnchor = "import { openExternalLink } from '@/lib/external-link'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('billing/plans-view.tsx', 'import anchor');
+    }
+    out = out.replace(
+      importAnchor,
+      `import { translateNow, useI18n } from '@/i18n'\n${importAnchor}`
+    );
+    changed = true;
+  }
+  const wireHook = (anchor, label) => {
+    const at = out.indexOf(anchor);
+    if (at < 0) throw new PatchAnchorError('billing/plans-view.tsx', label);
+    if (out.slice(Math.max(0, at - 120), at + anchor.length + 120).includes('useI18n()')) return;
+    out = out.slice(0, at + anchor.length) + `\n  const { t } = useI18n()` + out.slice(at + anchor.length);
+    changed = true;
+  };
+  wireHook('function DowngradeConfirm({ flow, tier }: { flow: DowngradeFlow; tier: BillingPlanTierView }) {', 'DowngradeConfirm signature');
+  wireHook('function PlanCard({ flow, tier }: { flow: DowngradeFlow; tier: BillingPlanTierView }) {', 'PlanCard signature');
+  wireHook('export function BillingPlansView({ onBack, tiers }: { onBack: () => void; tiers: BillingPlanTierView[] }) {', 'BillingPlansView signature');
+
+  // 0б. previewMessage — обычная функция (не компонент): translateNow вместо хука.
+  // Сначала конвертируем оригинальные литералы (до того как общие шаги тронули бы их),
+  // затем — уже подменённые t.* → translateNow.
+  const scheduledAnchor = "`Change to ${targetName} — takes effect ${formatBillingDate(preview.effective_at)}. No charge now; ` +\n        `you keep your current plan until then.${creditsDelta ? ` Monthly credits change: ${creditsDelta}.` : ''}`";
+  if (!out.includes(scheduledAnchor)) {
+    throw new PatchAnchorError('billing/plans-view.tsx', 'previewMessage scheduled template');
+  }
+  out = out.replace(
+    scheduledAnchor,
+    "translateNow('settings.billing.effectScheduled', targetName, formatBillingDate(preview.effective_at), creditsDelta)"
+  );
+  changed = true;
+  const notSchedAnchor = "return 'This change cannot be scheduled here.'";
+  if (!out.includes(notSchedAnchor)) {
+    throw new PatchAnchorError('billing/plans-view.tsx', 'previewMessage default literal');
+  }
+  out = out.replace(notSchedAnchor, "return translateNow('settings.billing.notScheduleable')");
+  changed = true;
+  const pvCheckingAnchor = "'Checking this change…'";
+  if (out.includes(pvCheckingAnchor)) {
+    out = out.replace(pvCheckingAnchor, "translateNow('settings.billing.checkingChange')");
+    changed = true;
+  }
+  const pvBlockedAnchor = "'That change cannot be made here.'";
+  if (out.includes(pvBlockedAnchor)) {
+    out = out.replace(pvBlockedAnchor, "translateNow('settings.billing.blockedChange')");
+    changed = true;
+  }
+  const pvAlreadyAnchor = "`You are already on ${targetName} — nothing to change.`";
+  if (out.includes(pvAlreadyAnchor)) {
+    out = out.replace(pvAlreadyAnchor, "translateNow('settings.billing.alreadyOnPlan', targetName)");
+    changed = true;
+  }
+
   // 1. 'Plans' header
   out = replaceJsxText(out, 'Plans', '{t.settings.billing.plans}', 'billing/plans-view.tsx', 'Plans header');
   changed = true;
@@ -868,6 +974,24 @@ function patchAutoReloadRow(content) {
 
   let changed = false;
   let out = content;
+
+  // 0. i18n-wiring: import + хук (без них `t.*` не определён — TS2304)
+  if (!/from '@\/i18n'/.test(out)) {
+    const importAnchor = "import { Button } from '@/components/ui/button'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('billing/auto-reload-row.tsx', 'import anchor');
+    }
+    out = out.replace(importAnchor, `import { useI18n } from '@/i18n'\n${importAnchor}`);
+    changed = true;
+  }
+  if (!/const \{ t \} = useI18n\(\)/.test(out)) {
+    const bodyAnchor = '  const [saving, setSaving] = useState(false)';
+    if (!out.includes(bodyAnchor)) {
+      throw new PatchAnchorError('billing/auto-reload-row.tsx', 'component body anchor');
+    }
+    out = out.replace(bodyAnchor, `  const { t } = useI18n()\n\n${bodyAnchor}`);
+    changed = true;
+  }
 
   // 1. 'Auto-refill updated.'
   const updatedAnchor = "'Auto-refill updated.'";
@@ -963,6 +1087,24 @@ function patchCurrentPlanCard(content) {
 
   let changed = false;
   let out = content;
+
+  // 0. i18n-wiring: import + хук (без них `t.*` не определён — TS2304)
+  if (!/from '@\/i18n'/.test(out)) {
+    const importAnchor = "import { Button } from '@/components/ui/button'";
+    if (!out.includes(importAnchor)) {
+      throw new PatchAnchorError('billing/current-plan-card.tsx', 'import anchor');
+    }
+    out = out.replace(importAnchor, `import { useI18n } from '@/i18n'\n${importAnchor}`);
+    changed = true;
+  }
+  if (!/const \{ t \} = useI18n\(\)/.test(out)) {
+    const sigAnchor = 'export function CurrentPlanCard({ onViewPlans, plan }: { onViewPlans: () => void; plan: BillingPlanCardView }) {';
+    if (!out.includes(sigAnchor)) {
+      throw new PatchAnchorError('billing/current-plan-card.tsx', 'component signature');
+    }
+    out = out.replace(sigAnchor, `${sigAnchor}\n  const { t } = useI18n()`);
+    changed = true;
+  }
 
   // 1. 'Undo' — строка внутри JSX-выражения {busy ? 'Undoing…' : 'Undo'}
   const undoAnchor = `: 'Undo'}`;
@@ -1399,16 +1541,19 @@ function patchUseBillingState(content) {
   }
 
   // `${formatMoney(spent)} of ${formatMoney(limit)} used`
-  const ofUsedAnchor = '`${';
-  // Look for the specific pattern: `${cap.spent_display || formatMoney(spent)} of ${cap.limit_display || formatMoney(limit)} used`
-  const ofUsedPattern = /\`\$\{[^}]+\} of \$\{[^}]+\} used\`/;
+  // Извлекаем ${...}-выражения целиком (без фигурных скобок) и собираем чистый вызов.
+  const ofUsedPattern = /`\$\{[^}]+\} of \$\{[^}]+\} used`/;
   const ofUsedMatch = out.match(ofUsedPattern);
   if (ofUsedMatch && !out.includes("translateNow('settings.billing.state.ofUsed'")) {
+    const exprs = [...ofUsedMatch[0].matchAll(/\$\{([^}]+)\}/g)].map((m) => m[1]);
+    if (exprs.length < 2) {
+      throw new PatchAnchorError('billing/use-billing-state.ts', 'ofUsed interpolation args');
+    }
     out = out.replace(
       ofUsedMatch[0],
-      `translateNow('settings.billing.state.ofUsed', ${ofUsedMatch[0].slice(2, ofUsedMatch[0].indexOf('} of '))}, ${ofUsedMatch[0].slice(ofUsedMatch[0].indexOf('} of ${') + 7, ofUsedMatch[0].lastIndexOf('}'))})`
+      `translateNow('settings.billing.state.ofUsed', ${exprs[0]}, ${exprs[1]})`
     );
-    // More robust: just replace the four known patterns
+    changed = true;
   }
 
   // `Enabled` / `Off` pill labels
@@ -1627,21 +1772,8 @@ function extendEnTsBilling(content) {
     throw new PatchAnchorError('en.ts (extend)', 'billing: { inside settings');
   }
 
-  // Парсим глубину для поиска закрывающей }
-  let depth = 0;
-  let billingEnd = -1;
-  let j = out.indexOf('{', billingStart);
-  for (; j < out.length; j++) {
-    if (out[j] === '{') depth++;
-    else if (out[j] === '}') {
-      depth--;
-      if (depth === 0) { billingEnd = j; break; }
-    }
-  }
-
-  if (billingEnd < 0) {
-    throw new PatchAnchorError('en.ts (extend)', 'closing } of billing block');
-  }
+  // Парсим глубину для поиска закрывающей } (строко-безопасно)
+  const billingEnd = findBlockEnd(out, billingStart, 'en.ts (extend)', 'closing } of billing block');
 
   // Блоки state и errors для вставки перед закрывающей } billing
   const stateBlock = `,
@@ -1758,10 +1890,16 @@ function extendEnTsBilling(content) {
       requestFailedMessage: 'Billing request failed.',
     }`;
 
-  // Вставляем оба блока перед закрывающей } billing
+  // Вставляем оба блока перед закрывающей } billing.
+  // Текст перед точкой вставки заканчивается запятой (usageLabel: ...,) —
+  // ведущая запятая stateBlock лишняя: slice(1). Между state и errors запятая
+  // остаётся (errorsBlock начинается с ',').
+  const beforeBillingEnd = out.slice(0, billingEnd).replace(/\s+$/, '');
+  const needComma = !beforeBillingEnd.endsWith(',') && !beforeBillingEnd.endsWith('{');
   out =
-    out.slice(0, billingEnd) +
-    stateBlock +
+    beforeBillingEnd +
+    (needComma ? ',' : '') +
+    stateBlock.slice(1) +
     errorsBlock +
     out.slice(billingEnd);
 
@@ -1796,21 +1934,8 @@ function patchEnTs(content) {
     throw new PatchAnchorError('en.ts', 'model: { inside settings');
   }
 
-  // Ищем закрытие model объекта
-  let depth = 0;
-  let modelEnd = -1;
-  let j = out.indexOf('{', modelStart);
-  for (; j < out.length; j++) {
-    if (out[j] === '{') depth++;
-    else if (out[j] === '}') {
-      depth--;
-      if (depth === 0) { modelEnd = j; break; }
-    }
-  }
-
-  if (modelEnd < 0) {
-    throw new PatchAnchorError('en.ts', 'closing } of model block');
-  }
+  // Ищем закрытие model объекта (строко-безопасно)
+  const modelEnd = findBlockEnd(out, modelStart, 'en.ts', 'closing } of model block');
 
   // Добавляем moa подобъект в model (перед закрывающей })
   const moaBlock = `,\n    moa: {\n      title: 'Mixture of Agents',\n      description:\n        'Configure named presets that appear as models under the Mixture of Agents provider. The aggregator is the acting model.',\n      preset: 'Preset',\n      enabled: 'Enabled',\n      setDefault: 'Set default',\n      delete: 'Delete',\n      newPreset: 'new preset',\n      addPreset: 'Add preset',\n      defaultLabel: 'Default:',\n      referenceN: (n: number) => \`Reference \${n}\`,\n      remove: 'Remove',\n      addReference: 'Add reference model',\n      aggregator: 'Aggregator',\n    }`;
@@ -1820,24 +1945,14 @@ function patchEnTs(content) {
   changed = true;
 
   // Вставляем billing и customEndpoints в settings
-  // Ищем закрытие settings блока
+  // Ищем закрытие settings блока (строко-безопасно)
   const settingsStart = m.index;
-  let sDepth = 0;
-  let settingsEnd = -1;
-  let sj = out.indexOf('{', settingsStart);
-  for (; sj < out.length; sj++) {
-    if (out[sj] === '{') sDepth++;
-    else if (out[sj] === '}') {
-      sDepth--;
-      if (sDepth === 0) { settingsEnd = sj; break; }
-    }
-  }
+  const settingsEnd = findBlockEnd(out, settingsStart, 'en.ts', 'closing } of settings block');
 
-  if (settingsEnd < 0) {
-    throw new PatchAnchorError('en.ts', 'closing } of settings block');
-  }
-
-  const billingBlock = `,\n    billing: {\n      title: 'Billing',\n      plan: 'Plan',\n      paymentCredits: 'Payment & credits',\n      usage: 'Usage',\n      processingSettlement: 'Processing… checking settlement',\n      creditsAdded: (amount: string) => \`\${amount} added. Balance is refreshing.\`,\n      openPortal: 'Open portal',\n      retry: 'Retry',\n      buy: 'Buy',\n      turnOffAutoRefill: 'Turn off auto-refill?',\n      turnOff: 'Turn off',\n      disable: 'Disable',\n      autoRefillUpdated: 'Auto-refill updated.',\n      autoRefillTurnedOff: 'Auto-refill turned off.',\n      threshold: 'Threshold',\n      reloadTo: 'Reload to',\n      plans: 'Plans',\n      currentPlan: 'Current plan',\n      scheduled: 'Scheduled',\n      downgrade: 'Downgrade',\n      manage: 'Manage',\n      undo: 'Undo',\n      undoing: 'Undoing…',\n      confirmDowngrade: 'Confirm downgrade',\n      checkingChange: 'Checking this change…',\n      blockedChange: 'That change cannot be made here.',\n      alreadyOnPlan: (name: string) => \`You are already on \${name} — nothing to change.\`,\n      noPlansAvailable: 'No plans are available to change to right now.',\n      tryAgain: 'Try again',\n      save: 'Save',\n      saving: 'Saving…',\n      cancel: 'Cancel',\n      usageLabel: (label: string) => \`\${label} usage\`,\n    }`;
+  const billingBlock = `,\n    billing: {\n      title: 'Billing',\n      plan: 'Plan',\n      paymentCredits: 'Payment & credits',\n      usage: 'Usage',\n      processingSettlement: 'Processing… checking settlement',\n      creditsAdded: (amount: string) => \`\${amount} added. Balance is refreshing.\`,\n      openPortal: 'Open portal',\n      retry: 'Retry',\n      buy: 'Buy',\n      turnOffAutoRefill: 'Turn off auto-refill?',\n      turnOff: 'Turn off',\n      disable: 'Disable',\n      autoRefillUpdated: 'Auto-refill updated.',\n      autoRefillTurnedOff: 'Auto-refill turned off.',\n      threshold: 'Threshold',\n      reloadTo: 'Reload to',\n      plans: 'Plans',\n      currentPlan: 'Current plan',\n      scheduled: 'Scheduled',\n      downgrade: 'Downgrade',\n      manage: 'Manage',\n      undo: 'Undo',\n      undoing: 'Undoing…',\n      confirmDowngrade: 'Confirm downgrade',\n      checkingChange: 'Checking this change…',\n      blockedChange: 'That change cannot be made here.',\n      alreadyOnPlan: (name: string) => \`You are already on \${name} — nothing to change.\`,
+      effectScheduled: (targetName: string, effectiveAt: string, creditsDelta: string) =>
+        \`Change to \${targetName} — takes effect \${effectiveAt}. No charge now; you keep your current plan until then.\${creditsDelta ? \` Monthly credits change: \${creditsDelta}.\` : ''}\`,
+      notScheduleable: 'This change cannot be scheduled here.',\n      noPlansAvailable: 'No plans are available to change to right now.',\n      tryAgain: 'Try again',\n      save: 'Save',\n      saving: 'Saving…',\n      cancel: 'Cancel',\n      usageLabel: (label: string) => \`\${label} usage\`,\n    }`;
 
   const customEndpointsBlock = `,\n    customEndpoints: {\n      title: 'Custom Endpoints',\n      emptyTitle: 'No custom endpoints',\n      emptyDescription: 'Add an OpenAI-compatible endpoint below.',\n      editTitle: 'Edit Endpoint',\n      addTitle: 'Add Endpoint',\n      name: 'Name',\n      providerId: 'Provider ID',\n      endpointUrl: 'Endpoint URL',\n      defaultModel: 'Default Model',\n      context: 'Context',\n      apiKey: 'API Key',\n      useForNewChats: 'Use for new chats',\n      discoverModels: 'Discover models',\n      test: 'Test',\n      save: 'Save',\n      newEndpoint: 'New endpoint',\n      active: 'Active',\n      use: 'Use',\n      deleteEndpoint: 'Delete endpoint',\n      loadError: 'Could not load custom endpoints',\n      saveSuccess: 'Custom endpoint saved.',\n      saveFailed: 'Save failed',\n      validationFailed: 'Validation failed',\n      activationFailed: 'Activation failed',\n      deleteFailed: 'Delete failed',\n      reachable: 'Endpoint is reachable.',\n      reachableWithCount: (count: number) => \`Endpoint is reachable. Found \${count} models.\`,\n      validationFailedEndpoint: 'Endpoint validation failed.',\n      deleteConfirm: (name: string) => \`Delete \${name}?\`,\n    }`;
 
@@ -1879,15 +1994,59 @@ const COMPONENT_FILES = {
 const RU_BLOCKS = require('./components-patch-ru-blocks.js');
 
 function findBlockEnd(out, startIdx, file, label) {
+  const j0 = out.indexOf('{', startIdx);
+  if (j0 < 0) throw new PatchAnchorError(file, label);
   let depth = 0;
-  let j = out.indexOf('{', startIdx);
-  if (j < 0) throw new PatchAnchorError(file, label);
-  for (; j < out.length; j++) {
-    if (out[j] === '{') depth++;
-    else if (out[j] === '}') {
-      depth--;
-      if (depth === 0) return j;
+  let i = j0;
+  const n = out.length;
+  while (i < n) {
+    const c = out[i];
+    // Строки и шаблоны: пропускаем целиком (${...} внутри шаблона — рекурсивный счёт)
+    if (c === "'" || c === '"' || c === '`') {
+      const q = c;
+      i++;
+      while (i < n) {
+        if (out[i] === '\\') { i += 2; continue; }
+        if (out[i] === q) { i++; break; }
+        if (q === '`' && out[i] === '$' && out[i + 1] === '{') {
+          // ${ expr } — считаем скобки внутри выражения (строки там тоже возможны)
+          i += 2;
+          let d = 1;
+          while (i < n && d > 0) {
+            if (out[i] === "'" || out[i] === '"' || out[i] === '`') {
+              const q2 = out[i];
+              i++;
+              while (i < n && out[i] !== q2) { if (out[i] === '\\') i++; i++; }
+              i++;
+              continue;
+            }
+            if (out[i] === '{') d++;
+            else if (out[i] === '}') d--;
+            i++;
+          }
+          continue;
+        }
+        i++;
+      }
+      continue;
     }
+    // Комментарии
+    if (c === '/' && out[i + 1] === '/') {
+      while (i < n && out[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '/' && out[i + 1] === '*') {
+      i += 2;
+      while (i < n && !(out[i] === '*' && out[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+    i++;
   }
   throw new PatchAnchorError(file, label);
 }
@@ -1914,20 +2073,104 @@ function patchRuTs(content) {
     changed = true;
   }
 
-  // Расширение billing: state + errors
+  // Расширение billing: state + errors.
+  // RU-блоки не имеют ведущей запятой; перед точкой вставки запятая уже есть
+  // (последняя запись billing-блока) — вычисляем prefix. Между state и errors
+  // запятую добавляем явно.
   if (!/\s+state:\s*\{/.test(out) || !/\s+errors:\s*\{/.test(out)) {
     const billingStart = out.search(/\n\s{4,}billing:\s*\{/);
     if (billingStart < 0) throw new PatchAnchorError('ru.ts (extend)', 'billing: { inside settings');
     const billingEnd = findBlockEnd(out, billingStart, 'ru.ts (extend)', 'closing } of billing block');
+    const beforeRu = out.slice(0, billingEnd).replace(/\s+$/, '');
+    const prefixRu = beforeRu.endsWith(',') || beforeRu.endsWith('{') ? '' : ',';
     out =
-      out.slice(0, billingEnd) +
-      `,\n    ${RU_BLOCKS.billingStateBlock}` +
-      `,\n    ${RU_BLOCKS.billingErrorsBlock}` +
+      beforeRu +
+      prefixRu +
+      `\n    ${RU_BLOCKS.billingStateBlock},` +
+      `\n    ${RU_BLOCKS.billingErrorsBlock}` +
       out.slice(billingEnd);
     changed = true;
   }
 
   return { content: out, changed };
+}
+
+// ---------------------------------------------------------------------------
+// ПАТЧ zh.ts — zh типизирован полным Translations, расширение обязательно
+// (иначе TS2741 после patchTypesTs). Блоки из PR-worktree zh.ts.
+// ---------------------------------------------------------------------------
+const ZH_BLOCKS = require('./components-patch-zh-blocks.js');
+
+function patchZhTs(content) {
+  let changed = false;
+  let out = content;
+
+  if (!/\s+moa:\s*\{/.test(out) && !/\s+customEndpoints:\s*\{/.test(out)) {
+    const modelStart = out.search(/\n\s+model:\s*\{/);
+    if (modelStart < 0) throw new PatchAnchorError('zh.ts', 'model: { inside settings');
+    const modelEnd = findBlockEnd(out, modelStart, 'zh.ts', 'closing } of model block');
+    out = out.slice(0, modelEnd) + `,\n    ${ZH_BLOCKS.moaBlock}` + out.slice(modelEnd);
+
+    const settingsStart = out.search(/\n\s+settings:\s*\{/);
+    if (settingsStart < 0) throw new PatchAnchorError('zh.ts', 'settings: { block');
+    const settingsEnd = findBlockEnd(out, settingsStart, 'zh.ts', 'closing } of settings block');
+    out =
+      out.slice(0, settingsEnd) +
+      `,\n    ${ZH_BLOCKS.billingBlock}` +
+      `,\n    ${ZH_BLOCKS.customEndpointsBlock}` +
+      out.slice(settingsEnd);
+    changed = true;
+  }
+
+  if (!/\s+state:\s*\{/.test(out) || !/\s+errors:\s*\{/.test(out)) {
+    const billingStart = out.search(/\n\s{4,}billing:\s*\{/);
+    if (billingStart < 0) throw new PatchAnchorError('zh.ts (extend)', 'billing: { inside settings');
+    const billingEnd = findBlockEnd(out, billingStart, 'zh.ts (extend)', 'closing } of billing block');
+    const beforeZh = out.slice(0, billingEnd).replace(/\s+$/, '');
+    const prefixZh = beforeZh.endsWith(',') || beforeZh.endsWith('{') ? '' : ',';
+    out =
+      beforeZh +
+      prefixZh +
+      `\n    ${ZH_BLOCKS.billingStateBlock},` +
+      `\n    ${ZH_BLOCKS.billingErrorsBlock}` +
+      out.slice(billingEnd);
+    changed = true;
+  }
+
+  return { content: out, changed };
+}
+
+// ---------------------------------------------------------------------------
+// ПАТЧ types.ts — TS-интерфейсы новых секций (иначе TS2339 в компонентах).
+// Блоки генерируются scripts/gen-type-blocks.js из песочно-патченого en.ts.
+// ---------------------------------------------------------------------------
+const TYPE_BLOCKS = require('./components-patch-type-blocks.js');
+
+function patchTypesTs(content) {
+  if (/\s+moa:\s*\{/.test(content) || /\s+customEndpoints:\s*\{/.test(content)) {
+    return { content, changed: false };
+  }
+
+  let out = content;
+
+  // moa → внутрь settings.model (перед закрывающей } модели)
+  const modelStart = out.search(/\n\s+model:\s*\{/);
+  if (modelStart < 0) throw new PatchAnchorError('types.ts', 'model: { inside settings');
+  const modelEnd = findBlockEnd(out, modelStart, 'types.ts', 'closing } of model block');
+  const beforeModel = out.slice(0, modelEnd).replace(/\s+$/, '');
+  out = beforeModel + `\n    ${TYPE_BLOCKS.moaTypeBlock}\n  ` + out.slice(modelEnd);
+
+  // billing + customEndpoints → перед закрывающей } settings
+  const settingsStart = out.search(/\n\s+settings:\s*\{/);
+  if (settingsStart < 0) throw new PatchAnchorError('types.ts', 'settings: { block');
+  const settingsEnd = findBlockEnd(out, settingsStart, 'types.ts', 'closing } of settings block');
+  const beforeSettings = out.slice(0, settingsEnd).replace(/\s+$/, '');
+  out =
+    beforeSettings +
+    `\n    ${TYPE_BLOCKS.billingTypeBlock}\n\n    ${TYPE_BLOCKS.customEndpointsTypeBlock}\n  ` +
+    out.slice(settingsEnd);
+
+  return { content: out, changed: true };
 }
 
 function applyComponentPatches(desktopDir) {
@@ -1982,6 +2225,34 @@ function applyComponentPatches(desktopDir) {
     }
   }
 
+  // 2в. Патчим types.ts — TS-интерфейсы новых секций
+  const typesPath = path.join(i18nDir(desktopDir), 'types.ts');
+  if (fs.existsSync(typesPath)) {
+    const typesRaw = fs.readFileSync(typesPath);
+    const typesEol = detectEol(typesRaw.toString('utf8'));
+    const typesR = patchTypesTs(toUnix(typesRaw.toString('utf8')));
+    if (typesR.changed) {
+      originals['types.ts'] = typesRaw;
+      eols['types.ts'] = typesEol;
+      patched['types.ts'] = typesR.content;
+      changed.push('types.ts');
+    }
+  }
+
+  // 2г. Патчим zh.ts (полный Translations — обязателен к расширению)
+  const zhPath = path.join(i18nDir(desktopDir), 'zh.ts');
+  if (fs.existsSync(zhPath)) {
+    const zhRaw = fs.readFileSync(zhPath);
+    const zhEol = detectEol(zhRaw.toString('utf8'));
+    const zhR = patchZhTs(toUnix(zhRaw.toString('utf8')));
+    if (zhR.changed) {
+      originals['zh.ts'] = zhRaw;
+      eols['zh.ts'] = zhEol;
+      patched['zh.ts'] = zhR.content;
+      changed.push('zh.ts');
+    }
+  }
+
   if (changed.length === 0) {
     return { changed: [], already: true };
   }
@@ -2001,7 +2272,7 @@ function applyComponentPatches(desktopDir) {
   // 4. Запись
   for (const [relPath, content] of Object.entries(patched)) {
     let filePath;
-    if (relPath === 'en.ts' || relPath === 'ru.ts') {
+    if (relPath === 'en.ts' || relPath === 'ru.ts' || relPath === 'types.ts' || relPath === 'zh.ts') {
       filePath = path.join(i18nDir(desktopDir), relPath);
     } else {
       filePath = path.join(dir, relPath);

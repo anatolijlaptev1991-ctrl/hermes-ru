@@ -366,17 +366,27 @@ function verifySources(desktopDir) {
 
 function snapshotSources(desktopDir) {
   const dir = i18nDir(desktopDir);
+  const settingsDir = path.join(desktopDir, 'src', 'app', 'settings');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupDir = path.join(getDataDir(), 'backups', stamp);
   fs.mkdirSync(backupDir, { recursive: true });
   const manifest = { createdAt: new Date().toISOString(), desktopDir, files: [] };
-  for (const f of [...I18N_FILES, 'ru.ts']) {
-    const p = path.join(dir, f);
-    const existed = fs.existsSync(p);
-    const entry = { file: f, existed };
-    if (existed) {
-      const buf = fs.readFileSync(p);
-      fs.writeFileSync(path.join(backupDir, f), buf);
+
+  // Плоские i18n-файлы + en.ts (его патчит components-patch) + компоненты
+  let componentRels = [];
+  try {
+    componentRels = Object.keys(require('./components-patch').COMPONENT_FILES);
+  } catch { /* модуль старой версии — только i18n */ }
+  const targets = [
+    ...[...I18N_FILES, 'ru.ts', 'en.ts'].map(f => ({ rel: f, abs: path.join(dir, f) })),
+    ...componentRels.map(f => ({ rel: `src/app/settings/${f}`, abs: path.join(settingsDir, f) })),
+  ];
+
+  for (const t of targets) {
+    const entry = { file: t.rel, existed: fs.existsSync(t.abs) };
+    if (entry.existed) {
+      const buf = fs.readFileSync(t.abs);
+      fs.writeFileSync(path.join(backupDir, t.rel.replace(/[\\/]/g, '__')), buf);
       entry.sha256 = sha256(buf);
     }
     manifest.files.push(entry);
@@ -401,9 +411,13 @@ function restoreFromBackup(backupDir) {
   const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, 'manifest.json'), 'utf8'));
   const dir = i18nDir(manifest.desktopDir);
   for (const entry of manifest.files) {
-    const target = path.join(dir, entry.file);
+    // Совместимость: плоские имена (старые манифесты) — i18n-файлы;
+    // пути с '/' — относительно desktopDir (components-patch покрытие v1.1.3+)
+    const target = entry.file.includes('/')
+      ? path.join(manifest.desktopDir, entry.file)
+      : path.join(dir, entry.file);
     if (entry.existed) {
-      const buf = fs.readFileSync(path.join(backupDir, entry.file));
+      const buf = fs.readFileSync(path.join(backupDir, entry.file.replace(/[\\/]/g, '__')));
       if (sha256(buf) !== entry.sha256) throw new Error(`snapshot повреждён: ${entry.file}`);
       fs.writeFileSync(target, buf);
     } else if (fs.existsSync(target)) {

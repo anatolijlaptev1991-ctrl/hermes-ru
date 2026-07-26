@@ -23,7 +23,7 @@ const engine = require('../src/patch-engine.js');
 const RU_TS = "import { defineLocale } from './define-locale'\n\nexport const ru = defineLocale({\n  common: { apply: 'Применить' },\n  settings: {\n    model: {\n      loading: 'Загрузка…',\n    },\n  },\n})\n";
 
 function typesFile(locales) {
-  return `// Desktop i18n type contract.\n\nexport type Locale = ${locales.map(l => `'${l}'`).join(' | ')}\n\nexport type Translations = {\n  common: { apply: string }\n}\n`;
+  return `// Desktop i18n type contract.\n\nexport type Locale = ${locales.map(l => `'${l}'`).join(' | ')}\n\nexport type Translations = {\n  common: { apply: string }\n  settings: {\n    model: {\n      loading: string\n    }\n  }\n}\n`;
 }
 
 function catalogFile(locales) {
@@ -261,10 +261,11 @@ export function MoaSection() {
 }
 `;
 
-const CUSTOM_ENDPOINTS_FIXTURE = `import { Globe, Plus } from '@/lib/icons'
+const CUSTOM_ENDPOINTS_FIXTURE = `import { Button } from '@/components/ui/button'
+import { Globe, Plus } from '@/lib/icons'
 import { SectionHeading } from './primitives'
 
-export function CustomEndpointsSettings() {
+export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: CustomEndpointsSettingsProps) {
   return (
     <div>
       <SectionHeading icon={Globe} title="Custom Endpoints" />
@@ -292,42 +293,121 @@ export function CustomEndpointsSettings() {
 }
 `;
 
-const BILLING_INDEX_FIXTURE = `import { BarChart3, CreditCard, Package } from '@/lib/icons'
+const BILLING_INDEX_FIXTURE = `import { Button } from '@/components/ui/button'
+import { BarChart3, CreditCard, Package } from '@/lib/icons'
 
-export function BillingSettings() {
+function BuyCreditsRow({ billing, row }: { billing: BillingStateResponse; row: BillingAccountRowView }) {
+  return (
+    <div>
+      <Button>Buy</Button>
+    </div>
+  )
+}
+
+function BuyCreditsOutcome() {
+  const stepUp = useStepUpFlow()
+  return (
+    <div>
+      <Button>
+            Open portal
+          </Button>
+      <Button>Retry</Button>
+    </div>
+  )
+}
+
+function BillingHeader({
+  fixtureName,
+  onFixtureChange
+}: {
+  fixtureName?: BillingFixtureSelection
+  onFixtureChange?: (value: BillingFixtureSelection) => void
+}) {
   return (
     <div>
       <span>Billing</span>
+    </div>
+  )
+}
+
+function BillingSettingsContent({
+  fixtureName,
+  onFixtureChange
+}: {
+  fixtureName?: BillingFixtureSelection
+  onFixtureChange?: (value: BillingFixtureSelection) => void
+}) {
+  const [subView, setSubView] = useRouteEnumParam<BillingSubView>('bview', BILLING_VIEWS, 'overview')
+  return (
+    <div>
       <SettingsSection icon={Package} title="Plan" />
       <SettingsSection icon={CreditCard} title="Payment & credits" />
       <SettingsSection icon={BarChart3} title="Usage" />
       <div>Processing… checking settlement</div>
       <div>added. Balance is refreshing.</div>
-      <Button>
-            Open portal
-          </Button>
-      <Button>Retry</Button>
-      <Button>Buy</Button>
     </div>
   )
 }
 `;
 
-const PLANS_VIEW_FIXTURE = `export function BillingPlansView() {
+const PLANS_VIEW_FIXTURE = `import { openExternalLink } from '@/lib/external-link'
+
+function previewMessage(phase: DowngradePhase, fallbackTierName: string): null | string {
+  if (phase.kind === 'previewing') {
+    return 'Checking this change…'
+  }
+  const { preview } = phase
+  const targetName = preview.target_tier_name ?? fallbackTierName
+  const creditsDelta = formatMonthlyCreditsDelta(preview.monthly_credits_delta)
+  switch (preview.effect) {
+    case 'blocked':
+      return preview.reason ?? 'That change cannot be made here.'
+    case 'no_op':
+      return \`You are already on \${targetName} — nothing to change.\`
+    case 'scheduled':
+      return (
+        \`Change to \${targetName} — takes effect \${formatBillingDate(preview.effective_at)}. No charge now; \` +
+        \`you keep your current plan until then.\${creditsDelta ? \` Monthly credits change: \${creditsDelta}.\` : ''}\`
+      )
+    default:
+      return 'This change cannot be scheduled here.'
+  }
+}
+
+function DowngradeConfirm({ flow, tier }: { flow: DowngradeFlow; tier: BillingPlanTierView }) {
   return (
     <div>
-      <span>Plans</span>
+      <Button>{'Confirm downgrade'}</Button>
+    </div>
+  )
+}
+
+function PlanCard({ flow, tier }: { flow: DowngradeFlow; tier: BillingPlanTierView }) {
+  return (
+    <div>
       <Pill tone="primary">Current plan</Pill>
       <Pill>Scheduled</Pill>
       <Button>Downgrade</Button>
-      <Button>{'Confirm downgrade'}</Button>
+    </div>
+  )
+}
+
+export function BillingPlansView({ onBack, tiers }: { onBack: () => void; tiers: BillingPlanTierView[] }) {
+  return (
+    <div>
+      <span>Plans</span>
       <Button>Try again</Button>
     </div>
   )
 }
 `;
 
-const AUTO_RELOAD_FIXTURE = `export function AutoReloadRow() {
+const AUTO_RELOAD_FIXTURE = `import { Button } from '@/components/ui/button'
+import { useState } from 'react'
+
+export function AutoReloadRow() {
+  const [saving, setSaving] = useState(false)
+
   return (
     <div>
       <label>Threshold</label>
@@ -341,7 +421,9 @@ const AUTO_RELOAD_FIXTURE = `export function AutoReloadRow() {
 }
 `;
 
-const CURRENT_PLAN_FIXTURE = `export function CurrentPlanCard() {
+const CURRENT_PLAN_FIXTURE = `import { Button } from '@/components/ui/button'
+
+export function CurrentPlanCard({ onViewPlans, plan }: { onViewPlans: () => void; plan: BillingPlanCardView }) {
   return (
     <div>
       <Button disabled={resumeFlow.busy} onClick={() => void resumeFlow.resume()} size="sm" type="button">
@@ -380,7 +462,7 @@ function makeComponentsDesktop(t, { eol = '\\n', patches = true } = {}) {
   fs.writeFileSync(path.join(desktop, 'hermes-version.json'), JSON.stringify({ cliVersion: '0.19.0' }));
 
   // i18n-файлы (нужны для findDesktopDir)
-  fs.writeFileSync(path.join(i18n, 'types.ts'), "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'\nexport type Translations = { common: { apply: string } }\n");
+  fs.writeFileSync(path.join(i18n, 'types.ts'), "export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'\nexport type Translations = {\n  common: { apply: string }\n  settings: {\n    model: {\n      loading: string\n    }\n  }\n}\n");
   fs.writeFileSync(path.join(i18n, 'catalog.ts'), "import { en } from './en'\nexport const TRANSLATIONS: Record<Locale, Translations> = { en }\n");
   fs.writeFileSync(path.join(i18n, 'languages.ts'), "export const DEFAULT_LOCALE: Locale = 'en'\nexport const LOCALE_OPTIONS = [{ id: 'en', name: 'English', englishName: 'English', configValue: 'en' }] as const satisfies readonly unknown[]\n");
 
