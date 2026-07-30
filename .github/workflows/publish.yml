@@ -143,7 +143,21 @@ jobs:
           $compat.version = "$env:BUMPED_VERSION"
           $compat | ConvertTo-Json -Depth 10 | Set-Content compat.json
 
+      - name: "🔍 Проверка: версия уже опубликована?"
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Checking if ${{ env.NPM_PACKAGE }}@$VERSION already exists on npm..."
+          if npm view "${{ env.NPM_PACKAGE }}@$VERSION" version >/dev/null 2>&1; then
+            echo "⚠️  Version $VERSION already published. Skipping publish."
+            echo "SKIP_PUBLISH=true" >> $GITHUB_ENV
+          else
+            echo "✓ Version $VERSION not yet published. Proceeding."
+            echo "SKIP_PUBLISH=false" >> $GITHUB_ENV
+          fi
+
       - name: 📦 npm publish
+        if: env.SKIP_PUBLISH != 'true'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
