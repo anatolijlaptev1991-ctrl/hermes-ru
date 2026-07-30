@@ -17,7 +17,18 @@
 
 ## Описание
 
-Полная русская локализация десктопного приложения **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** от Nous Research: меню, настройки, чат, уведомления, инструменты — **2658 ключей, 100% покрытие** (контракт проверяется тестом и компилятором TypeScript при каждой сборке).
+Полная русская локализация десктопного приложения **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** от Nous Research: меню, настройки, чат, уведомления, инструменты — **2755 ключей, 100% покрытие** (контракт проверяется тестом и компилятором TypeScript при каждой сборке).
+
+### Соавторы перевода
+
+Перевод объединяет два независимых вклада:
+
+| Соавтор | Вклад |
+|---------|-------|
+| **[DrMaks22](https://github.com/DrMaks22)** (PR [#72250](https://github.com/NousResearch/hermes-agent/pull/72250)) | Native-reviewed каталог — основа перевода |
+| **[anatolijlaptev1991-ctrl](https://github.com/anatolijlaptev1991-ctrl)** (PR [#71573](https://github.com/NousResearch/hermes-agent/pull/71573)) | Дополнительные ключи, ё-fidelity, i18n-wiring, пакет hermes-ru |
+
+Оба автора — носители русского языка. Мёрдж берёт лучший вариант из каждого источника.
 
 ## Быстрый старт
 
