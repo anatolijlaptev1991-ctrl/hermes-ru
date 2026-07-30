@@ -93,10 +93,21 @@ function buildOrInstruct(desktopDir, { noBuild = false } = {}) {
   if (engine.isHermesRunning()) {
     console.log('');
     warn('Hermes сейчас запущен — сборку НЕ запускаю (она закрыла бы приложение).');
-    console.log('  Чтобы появился русский, выберите любой вариант:');
+    console.log('  Чтобы появился русский интерфейс, выберите вариант:');
+    console.log('');
+    console.log('  ★ Рекомендуется: закройте это окно Hermes полностью (крестиком),');
+    console.log('    затем откройте терминал (cmd/PowerShell) и выполните:');
+    console.log('');
+    console.log('        hermes desktop --force-build');
+    console.log('');
+    console.log('    Эта команда пересоберёт приложение (2–10 мин) и запустит его.');
+    console.log('');
+    console.log('  Важно: обычный перезапуск приложения (закрыть → открыть .exe)');
+    console.log('  НЕ вызывает пересборку! Нужна именно команда в терминале.');
+    console.log('');
+    console.log('  Альтернативы:');
     console.log('    1) Закройте Hermes и выполните:  hermes-ru build');
-    console.log('    2) Или просто запустите:         hermes desktop   (само соберёт при запуске)');
-    console.log('    3) Или дождитесь `hermes update` — пересборка входит в обновление.');
+    console.log('    2) Или дождитесь `hermes update` — пересборка входит в обновление.');
     return;
   }
   if (runOfficialBuild()) {
@@ -220,8 +231,8 @@ async function commandStatus() {
   else if (a.state === 'clean') advice = 'Патч снят (после обновления Hermes?) → hermes-ru repair';
   else if (a.state === 'patched' && !runtimeRu && language !== 'ru') advice = 'display.language не ru → hermes config set display.language ru';
   else if (a.state === 'patched' && !runtimeRu) advice = running
-    ? 'Патч применён, ждёт пересборки → закройте Hermes и: hermes-ru build (или запустите hermes desktop)'
-    : 'Патч применён, ждёт пересборки → hermes-ru build';
+    ? 'Патч применён, НО сборка устарела → закройте Hermes, откройте терминал: hermes desktop --force-build'
+    : 'Патч применён, ждёт пересборки → откройте терминал: hermes desktop --force-build';
   else advice = 'Всё в порядке — русская локаль активна.';
   console.log(`\n  → ${advice}`);
 }
