@@ -24,6 +24,7 @@
     "compat.json",
     "CHANGELOG.md",
     "README.md",
+    "README.ru.md",
     "src/components-patch-ru-blocks.js",
     "src/components-patch-type-blocks.js",
     "src/components-patch-zh-blocks.js"
