@@ -1,6 +1,6 @@
 {
   "name": "@anatolijlaptev1991/hermes-ru",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Русская локализация Hermes Agent Desktop (Windows). Структурный патч i18n, живёт в штатном цикле обновлений Hermes — без launcher'ов и отдельных ярлыков.",
   "license": "MIT",
   "author": "Anatolij Laptev",
