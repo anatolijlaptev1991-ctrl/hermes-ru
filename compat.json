@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.2",
   "hermesVersions": [
     "0.17.0",
     "0.17.1",
@@ -7,7 +7,8 @@
     "0.18.0",
     "0.18.1",
     "0.18.2",
-    "0.19.0"
+    "0.19.0",
+    "0.19.1"
   ],
   "anchorStrategy": "structural",
   "notes": "v1.0: структурные якоря (patch-engine) — патч работает на любой комбинации локалей upstream; версия не из списка допускается только при 100% совпадении якорей (dry-run в doctor). Архитектура «штатный цикл»: uncommitted-правки + updates.non_interactive_local_changes=stash + content-hash build stamp. v1.1.0: components-patch — i18n-проводка захардкоженных строк MoA/billing/custom-endpoints настроек для 0.19.0. v1.1.1: components-patch — usage-панель биллинга (use-billing-state.ts) и баннеры ошибок (errors.ts), 110+ новых ключей."

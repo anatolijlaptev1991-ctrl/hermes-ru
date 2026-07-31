@@ -445,7 +445,7 @@ function newestBackup(desktopDir) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Version gate для components-patch (только 0.19.0)
+// Version gate для components-patch (0.19.x: 0.19.0 + 0.19.1)
 // ---------------------------------------------------------------------------
 
 function isVersion019(desktopDir) {
@@ -453,10 +453,10 @@ function isVersion019(desktopDir) {
   // в тестах молча пропускался бы — слепая зона, нашедшая ReferenceError v1.1.2)
   try {
     const marker = JSON.parse(fs.readFileSync(path.join(desktopDir, 'hermes-version.json'), 'utf8'));
-    if (marker.cliVersion) return marker.cliVersion === '0.19.0';
+    if (marker.cliVersion) return /^0\.19\./.test(marker.cliVersion);
   } catch { /* нет маркера — штатный путь */ }
   const info = detectHermes(desktopDir);
-  return info.cliVersion === '0.19.0';
+  return info.cliVersion ? /^0\.19\./.test(info.cliVersion) : false;
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +525,7 @@ function applyPatch(desktopDir, { ruTsSource } = {}) {
     throw new Error('Верификация после записи не пройдена (откат выполнен): ' + v.problems.join('; '));
   }
 
-  // 5. Components-patch (i18n-проводка MoA/billing/custom-endpoints) — только для 0.19.0
+  // 5. Components-patch (i18n-проводка MoA/billing/custom-endpoints) — для 0.19.x (0.19.0+)
   let componentChanged = [];
   if (isVersion019(desktopDir)) {
     const settingsDir = path.join(desktopDir, 'src', 'app', 'settings');
