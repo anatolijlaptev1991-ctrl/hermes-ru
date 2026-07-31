@@ -379,6 +379,7 @@ function snapshotSources(desktopDir) {
   } catch { /* модуль старой версии — только i18n */ }
   const targets = [
     ...[...I18N_FILES, 'ru.ts', 'en.ts'].map(f => ({ rel: f, abs: path.join(dir, f) })),
+    { rel: 'src/app/settings/ru-constants.ts', abs: path.join(desktopDir, 'src', 'app', 'settings', 'ru-constants.ts') },
     ...componentRels.map(f => ({ rel: `src/app/settings/${f}`, abs: path.join(settingsDir, f) })),
   ];
 
@@ -513,6 +514,15 @@ function applyPatch(desktopDir, { ruTsSource } = {}) {
       fs.writeFileSync(path.join(dir, f), fromUnix(patched[f], eols[f]), 'utf8');
     }
     fs.writeFileSync(path.join(dir, 'ru.ts'), fs.readFileSync(ruSource));
+
+    // ru-constants.ts — реэкспорт FIELD_LABELS/FIELD_DESCRIPTIONS (билд-блокер с 0.19.1)
+    const settingsDir = path.join(desktopDir, 'src', 'app', 'settings');
+    const ruConstantsPath = path.join(settingsDir, 'ru-constants.ts');
+    if (!fs.existsSync(ruConstantsPath)) {
+      fs.mkdirSync(settingsDir, { recursive: true });
+      const ruConstantsContent = `/**\n * Russian field-copy constants for settings UI.\n *\n * Temporary English fallback — re-exports the canonical English labels and\n * descriptions so the desktop app builds while Russian translations are being\n * authored.\n */\n\nimport { FIELD_DESCRIPTIONS, FIELD_LABELS } from '@/app/settings/constants'\n\nexport const RU_FIELD_LABELS: Record<string, string> = FIELD_LABELS\nexport const RU_FIELD_DESCRIPTIONS: Record<string, string> = FIELD_DESCRIPTIONS\n`;
+      fs.writeFileSync(ruConstantsPath, ruConstantsContent, 'utf8');
+    }
   } catch (e) {
     restoreFromBackup(backupDir);
     throw e;
